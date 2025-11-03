@@ -1,7 +1,6 @@
 // ===============================
 // 🔹 Định nghĩa kiểu dữ liệu Khách hàng
 // ===============================
-// Đã thêm: Kiểu KhachHang để định nghĩa dữ liệu cho màn hình CRM
 export type KhachHang = {
   id: string;
   ten: string; // Tên khách hàng (BẮT BUỘC)
@@ -9,7 +8,7 @@ export type KhachHang = {
   diaChi: string; // Địa chỉ
   email: string;
   ngaySinh: string; // Định dạng 'dd/MM/yyyy'
-  tongTienMua: number; // Tổng tiền đã mua (Dữ liệu quan trọng cho đồ án CRM)
+  tongTienMua: number; // Tổng tiền đã mua (quan trọng cho CRM)
   ngayTao: any; // Timestamp Firestore
 };
 
@@ -27,12 +26,12 @@ export type Thuoc = {
   danhMuc?: string;
   ghiChu?: string;
   imageUrl?: string; 		// ✅ Ảnh thuốc (URL)
-  qrValue?: string; 		// ✅ Mã QR sinh tự động
-  ngayTao?: any; 		// ✅ Ngày tạo Firestore (Timestamp)
+  qrValue?: string; 		// ✅ Mã QR tự sinh
+  ngayTao?: any; 		// ✅ Ngày tạo Firestore
 };
 
 // ===============================
-// 🔹 Kiểu dữ liệu cho từng sản phẩm trong hóa đơn
+// 🔹 Kiểu dữ liệu từng sản phẩm trong hóa đơn
 // ===============================
 export type HoaDonItem = {
   tenThuoc: string;
@@ -62,6 +61,10 @@ export type User = {
   email: string;
   name: string;
   role: "admin" | "staff";
+
+  // 🔹 Thêm các trường mới cho HR
+  salary?: number; // Lương cơ bản
+  shiftSchedule?: { day: string; start: string; end: string }[]; // Ca làm việc
 };
 
 // ===============================
@@ -78,7 +81,18 @@ export type NhatKyNhap = {
 };
 
 // ===============================
-// 🔹 RootStackParamList (TẤT CẢ MÀN HÌNH TRONG ỨNG DỤNG)
+// 🔹 Định nghĩa kiểu dữ liệu Chấm công (attendance)
+// ===============================
+export type Attendance = {
+  id?: string;
+  uid: string;          // ID nhân viên
+  date: string;         // YYYY-MM-DD
+  checkIn: string | null;
+  checkOut: string | null;
+};
+
+// ===============================
+// 🔹 RootStackParamList (TẤT CẢ MÀN HÌNH TRONG APP)
 // ===============================
 export type RootStackParamList = {
   // 🧭 Đăng nhập & đăng ký
@@ -87,7 +101,7 @@ export type RootStackParamList = {
   AdminTabs: undefined;
   StaffTabs: undefined;
 
-  // 📱 Tabs con (cần đảm bảo các tên tab đã dùng trong AppNavigator)
+  // 📱 Tabs con
   Main: undefined;
   Profile: undefined;
   HomeTab: undefined;
@@ -95,10 +109,9 @@ export type RootStackParamList = {
   Sales: undefined;
   StaffHomeTab: undefined;
 
-
   // 🏠 Trang chủ
-  Home: undefined; 		// ✅ Trang chủ admin
-  StaffHome: undefined; 	// ✅ Trang chủ nhân viên
+  Home: undefined; 		// Trang chủ admin
+  StaffHome: undefined; 	// Trang chủ nhân viên
 
   // ⚕️ Thuốc
   ThemThuoc: { id?: string } | undefined;
@@ -128,14 +141,19 @@ export type RootStackParamList = {
   ThongKe: undefined;
   KiemKho: undefined;
 
-  // 👥 Quản lý người dùng & Khách hàng
+  // 👥 Quản lý người dùng & khách hàng
   NhanVien: undefined;
   DangKyNhanVien: { editUser?: User };
-  
-  // ✅ FIX: THÊM MÀN HÌNH KHÁCH HÀNG
-  KhachHang: undefined; 
-  ChiTietKhachHang: { customerId: string }; 
-  
-  // 🧾 Nhật ký nhập thuốc (📦 mới thêm)
+
+  // Khách hàng
+  KhachHang: undefined;
+  ChiTietKhachHang: { customerId: string };
+
+  // 📦 Nhật ký nhập thuốc
   NhatKyNhapThuoc: { thuocId: string };
+
+  // 🔹 HR
+  ChamCong: { user: User };
+  BangLuong: { user: User };
+  LichLamViec: { user: User };
 };
