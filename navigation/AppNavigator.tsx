@@ -29,8 +29,9 @@ import ThemThuocScreen from "../app/screens/ThemThuoc";
 import ThongKeScreen from "../app/screens/ThongKe";
 import ThuocTheoDanhMucScreen from "../app/screens/ThuocTheoDanhMuc";
 import XuatXuScreen from "../app/screens/XuatXu";
-// ✅ IMPORT MÀN HÌNH KHÁCH HÀNG MỚI
 import KhachHangScreen from "../app/screens/KhachHangScreen";
+// ✅ THÊM IMPORT MÀN HÌNH CHI TIẾT KHÁCH HÀNG
+import ChiTietKhachHangScreen from "../app/screens/ChiTietKhachHangScreen"; 
 
 
 // ==========================
@@ -63,13 +64,20 @@ function AdminStackNavigator() {
         options={{ title: "Trang chủ" }}
       />
       
-      {/* ✅ ĐĂNG KÝ MÀN HÌNH KHÁCH HÀNG VÀO ADMIN STACK */}
+      {/* QUẢN LÝ KHÁCH HÀNG */}
       <AdminStack.Screen
         name="KhachHang"
         component={KhachHangScreen}
         options={{ title: "Quản Lý Khách Hàng" }}
       />
+      {/* ✅ FIX LỖI: THÊM ChiTietKhachHang VÀO CÙNG STACK VỚI KhachHangScreen */}
+      <AdminStack.Screen
+        name="ChiTietKhachHang"
+        component={ChiTietKhachHangScreen} 
+        options={{ title: "Chi Tiết Khách Hàng" }}
+      /> 
       
+      {/* THUỐC */}
       <AdminStack.Screen
         name="DanhSachThuoc"
         component={DanhSachThuocScreen}
@@ -85,6 +93,7 @@ function AdminStackNavigator() {
         component={ThemThuocScreen}
         options={{ title: "Thêm / Sửa thuốc" }}
       />
+      {/* HÓA ĐƠN */}
       <AdminStack.Screen
         name="HoaDon"
         component={HoaDonScreen}
@@ -100,6 +109,7 @@ function AdminStackNavigator() {
         component={ThemHoaDonScreen}
         options={{ title: "Thêm hóa đơn" }}
       />
+      {/* KHÁC */}
       <AdminStack.Screen
         name="ThongKe"
         component={ThongKeScreen}
@@ -115,7 +125,7 @@ function AdminStackNavigator() {
 }
 
 // =======================================================
-// 💊 Stack cho Kho Thuốc
+// 💊 Stack cho Kho Thuốc (Admin)
 // =======================================================
 function KhoThuocStack() {
   return (
@@ -135,6 +145,12 @@ function KhoThuocStack() {
         component={ThemThuocScreen}
         options={{ title: "➕ Thêm / Sửa thuốc" }}
       />
+      {/* KHUYẾN NGHỊ: Thêm ChiTietKhachHang nếu có thể truy cập từ đâu đó trong KhoThuocStack */}
+      {/* <AdminStack.Screen 
+        name="ChiTietKhachHang" 
+        component={ChiTietKhachHangScreen} 
+        options={{ title: "Chi Tiết Khách Hàng" }} 
+      /> */}
     </AdminStack.Navigator>
   );
 }
@@ -150,6 +166,21 @@ function StaffStackNavigator() {
         component={StaffHomeScreen}
         options={{ title: "Trang chủ" }}
       />
+      
+      {/* QUẢN LÝ KHÁCH HÀNG (Nên cho nhân viên xem/thêm khách hàng) */}
+      <StaffStack.Screen
+        name="KhachHang"
+        component={KhachHangScreen}
+        options={{ title: "Quản Lý Khách Hàng" }}
+      />
+      {/* ✅ KHUYẾN NGHỊ: Thêm ChiTietKhachHang cho Staff */}
+      <StaffStack.Screen
+        name="ChiTietKhachHang"
+        component={ChiTietKhachHangScreen} 
+        options={{ title: "Chi Tiết Khách Hàng" }}
+      /> 
+      
+      {/* QUẢN LÝ HÓA ĐƠN & THỐNG KÊ */}
       <StaffStack.Screen
         name="HoaDon"
         component={HoaDonScreen}
@@ -161,6 +192,13 @@ function StaffStackNavigator() {
         options={{ title: "Chi tiết hóa đơn" }}
       />
       <StaffStack.Screen
+        name="ThongKe" 
+        component={ThongKeScreen}
+        options={{ title: "Thống kê" }}
+      />
+
+      {/* QUẢN LÝ THUỐC & KHO */}
+      <StaffStack.Screen
         name="DanhSachThuoc"
         component={DanhSachThuocScreen}
         options={{ title: "Danh sách thuốc" }}
@@ -169,6 +207,38 @@ function StaffStackNavigator() {
         name="ChiTietThuoc"
         component={ChiTietThuoc}
         options={{ title: "Chi tiết thuốc" }}
+      />
+      <StaffStack.Screen
+        name="ThemThuoc"
+        component={ThemThuocScreen}
+        options={{ title: "Thêm/Sửa thuốc" }}
+      />
+      <StaffStack.Screen
+        name="NhapKho"
+        component={NhapKhoScreen}
+        options={{ title: "Quản lý Nhập kho" }}
+      />
+      <StaffStack.Screen
+        name="KiemKho"
+        component={KiemKhoScreen}
+        options={{ title: "Quản lý Kiểm kho" }}
+      />
+
+      {/* QUẢN LÝ DANH MỤC */}
+      <StaffStack.Screen
+        name="XuatXu"
+        component={XuatXuScreen}
+        options={{ title: "Quản lý Xuất xứ" }}
+      />
+      <StaffStack.Screen
+        name="DonViTinh"
+        component={DonViTinhScreen}
+        options={{ title: "Quản lý Đơn vị tính" }}
+      />
+      <StaffStack.Screen
+        name="DanhMuc"
+        component={DanhMucScreen}
+        options={{ title: "Quản lý Danh mục" }}
       />
     </StaffStack.Navigator>
   );
@@ -181,7 +251,8 @@ function AdminTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
-        headerShown: false,
+        // HomeTab chứa AdminStackNavigator, nên màn hình đầu tiên (Home) sẽ hiện header
+        headerShown: false, 
         tabBarActiveTintColor: "#007bff",
         tabBarInactiveTintColor: "#777",
       }}
@@ -319,7 +390,7 @@ export default function AppNavigator() {
           options={{ title: "Đăng ký nhân viên" }}
         />
 
-        {/* 📊 Các phần khác */}
+        {/* 📊 Các phần khác (Đã được Admin/Staff Stack lồng vào) */}
         <Stack.Screen name="DanhMuc" component={DanhMucScreen} />
         <Stack.Screen
           name="ThuocTheoDanhMuc"

@@ -1,4 +1,19 @@
 // ===============================
+// 🔹 Định nghĩa kiểu dữ liệu Khách hàng
+// ===============================
+// Đã thêm: Kiểu KhachHang để định nghĩa dữ liệu cho màn hình CRM
+export type KhachHang = {
+  id: string;
+  ten: string; // Tên khách hàng (BẮT BUỘC)
+  sdt: string; // Số điện thoại (Key chính, BẮT BUỘC)
+  diaChi: string; // Địa chỉ
+  email: string;
+  ngaySinh: string; // Định dạng 'dd/MM/yyyy'
+  tongTienMua: number; // Tổng tiền đã mua (Dữ liệu quan trọng cho đồ án CRM)
+  ngayTao: any; // Timestamp Firestore
+};
+
+// ===============================
 // 🔹 Định nghĩa kiểu dữ liệu Thuốc
 // ===============================
 export type Thuoc = {
@@ -6,14 +21,14 @@ export type Thuoc = {
   ten: string;
   soluong: number;
   hanSuDung: string;
-  giaBan?: number;          // ✅ Giá bán thuốc
+  giaBan?: number; 		// ✅ Giá bán thuốc
   donViTinh?: string;
   xuatXu?: string;
   danhMuc?: string;
   ghiChu?: string;
-  imageUrl?: string;        // ✅ Ảnh thuốc (URL)
-  qrValue?: string;         // ✅ Mã QR sinh tự động
-  ngayTao?: any;            // ✅ Ngày tạo Firestore (Timestamp)
+  imageUrl?: string; 		// ✅ Ảnh thuốc (URL)
+  qrValue?: string; 		// ✅ Mã QR sinh tự động
+  ngayTao?: any; 		// ✅ Ngày tạo Firestore (Timestamp)
 };
 
 // ===============================
@@ -54,10 +69,10 @@ export type User = {
 // ===============================
 export type NhatKyNhap = {
   id: string;
-  thuocId: string;          // ID thuốc liên quan
+  thuocId: string; 		// ID thuốc liên quan
   tenThuoc: string;
   soLuongNhap: number;
-  ngayNhap: any;            // Firestore Timestamp
+  ngayNhap: any; 		// Firestore Timestamp
   nhanVien?: string;
   ghiChu?: string;
 };
@@ -82,8 +97,8 @@ export type RootStackParamList = {
 
 
   // 🏠 Trang chủ
-  Home: undefined;         // ✅ Trang chủ admin
-  StaffHome: undefined;    // ✅ Trang chủ nhân viên
+  Home: undefined; 		// ✅ Trang chủ admin
+  StaffHome: undefined; 	// ✅ Trang chủ nhân viên
 
   // ⚕️ Thuốc
   ThemThuoc: { id?: string } | undefined;
@@ -116,9 +131,11 @@ export type RootStackParamList = {
   // 👥 Quản lý người dùng & Khách hàng
   NhanVien: undefined;
   DangKyNhanVien: { editUser?: User };
-  // ✅ THÊM MÀN HÌNH KHÁCH HÀNG ĐỂ FIX LỖI TYPESCRIPT
+  
+  // ✅ FIX: THÊM MÀN HÌNH KHÁCH HÀNG
   KhachHang: undefined; 
-
+  ChiTietKhachHang: { customerId: string }; 
+  
   // 🧾 Nhật ký nhập thuốc (📦 mới thêm)
   NhatKyNhapThuoc: { thuocId: string };
 };

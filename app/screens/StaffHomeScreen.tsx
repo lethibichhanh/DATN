@@ -10,8 +10,11 @@ const features = [
   { title: "Quản lý Nhập kho", icon: "download-outline", screen: "NhapKho" },
   { title: "Quản lý Thống kê", icon: "bar-chart-outline", screen: "ThongKe" },
   { title: "Quản lý Kiểm kho", icon: "search-circle-outline", screen: "KiemKho" },
-  { title: "Quản lý Thuốc", icon: "medkit-outline", screen: "Inventory" },
+  
+  // ✅ SỬA LỖI: Thay "Inventory" bằng "DanhSachThuoc" (Đã được đăng ký trong Staff Stack)
+  { title: "Quản lý Thuốc", icon: "medkit-outline", screen: "DanhSachThuoc" },
   { title: "Thêm thuốc", icon: "add-circle-outline", screen: "ThemThuoc" },
+  
   { title: "Quản lý Xuất xứ", icon: "globe-outline", screen: "XuatXu" },
   { title: "Quản lý Đơn vị tính", icon: "grid-outline", screen: "DonViTinh" },
   { title: "Quản lý Danh mục", icon: "folder-outline", screen: "DanhMuc" },
@@ -24,6 +27,7 @@ export default function StaffHomeScreen() {
 
   useEffect(() => {
     const now = new Date();
+    // Logic tính toán thống kê theo tháng
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
 
@@ -32,7 +36,9 @@ export default function StaffHomeScreen() {
       let total = 0;
       snapshot.forEach((doc) => {
         const data = doc.data();
-        const ngay = data.ngayBan?.toDate?.() || new Date(data.ngayBan);
+        // Xử lý trường ngày (ngayBan có thể là Timestamp, Date hoặc String)
+        const ngay = data.ngayBan?.toDate?.() || (data.ngayBan ? new Date(data.ngayBan.seconds * 1000) : new Date(data.ngayBan));
+        
         if (ngay >= startOfMonth && ngay <= endOfMonth) {
           total += data.tongTien || 0;
         }
@@ -45,7 +51,9 @@ export default function StaffHomeScreen() {
       let total = 0;
       snapshot.forEach((doc) => {
         const data = doc.data();
-        const ngay = data.ngayNhap?.toDate?.() || new Date(data.ngayNhap);
+        // Xử lý trường ngày (ngayNhap có thể là Timestamp, Date hoặc String)
+        const ngay = data.ngayNhap?.toDate?.() || (data.ngayNhap ? new Date(data.ngayNhap.seconds * 1000) : new Date(data.ngayNhap));
+        
         if (ngay >= startOfMonth && ngay <= endOfMonth) {
           total += data.tongTien || 0;
         }
@@ -77,6 +85,7 @@ export default function StaffHomeScreen() {
   const renderFeature = ({ item }: any) => (
     <TouchableOpacity
       style={styles.featureCard}
+      // Tất cả màn hình ở đây đều đã được đăng ký trong StaffStackNavigator
       onPress={() => navigation.navigate(item.screen)}
     >
       <Ionicons name={item.icon} size={28} color="#4a90e2" />
