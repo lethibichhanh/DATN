@@ -5,6 +5,9 @@ import {
   getDoc,
   onSnapshot,
   updateDoc,
+  query, // ĐÃ THÊM
+  where, // ĐÃ THÊM
+  getDocs, // ĐÃ THÊM
 } from "firebase/firestore";
 import React, { useEffect, useState, useMemo } from "react";
 import {
@@ -40,7 +43,7 @@ export default function BanhangScreen() {
   const [thuocs, setThuocs] = useState<Thuoc[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selected, setSelected] = useState<Record<string, number>>({});
-  const [khachHang, setKhachHang] = useState<string>("");
+  const [khachHang, setKhachHang] = useState<string>(""); // Giả định trường này lưu SĐT/ID khách hàng
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -70,17 +73,17 @@ export default function BanhangScreen() {
   // --- 2. LOGIC XỬ LÝ SỐ LƯỢNG & KIỂM TRA TỒN KHO ---
   const handleQuantityChange = (id: string, value: string) => {
     // 1. Chỉ giữ lại số nguyên
-    const num = parseInt(value.replace(/[^0-9]/g, '')); 
-    
+    const num = parseInt(value.replace(/[^0-9]/g, ''));
+
     // 2. Ép kiểu giá trị bán (0 nếu không hợp lệ)
     let soLuongBan = isNaN(num) || num < 0 ? 0 : num;
-    
+
     const item = thuocs.find((t) => t.id === id);
 
     // 3. Ép kiểu tồn kho an toàn (Chuyển sang chuỗi rồi float)
-    const tonKho = parseFloat(String(item?.soluong || 0)) || 0; 
+    const tonKho = parseFloat(String(item?.soluong || 0)) || 0;
 
-    // 4. KIỂM TRA TỒN KHO: 
+    // 4. KIỂM TRA TỒN KHO:
     if (soLuongBan > tonKho) {
       Alert.alert(
         "Lỗi tồn kho",
@@ -103,8 +106,8 @@ export default function BanhangScreen() {
             [id]: 0,
         }));
     } else {
-         // Xóa khỏi selected nếu giá trị là 0
-         setSelected((prev) => {
+        // Xóa khỏi selected nếu giá trị là 0
+        setSelected((prev) => {
             const newState = { ...prev };
             delete newState[id];
             return newState;
@@ -119,11 +122,8 @@ export default function BanhangScreen() {
       .filter((t) => selected[t.id] > 0) // Chỉ lấy các mặt hàng có số lượng > 0
       .map((t) => {
         // *** ĐẢM BẢO ÉP KIỂU GIÁ BÁN AN TOÀN TUYỆT ĐỐI ***
-        // 1. Chuyển giá trị (có thể là số/chuỗi/null) thành chuỗi
-        // 2. Thay thế mọi dấu phẩy/chấm bằng chuỗi rỗng (nếu dùng định dạng tiền tệ)
-        // 3. Chuyển thành số float. Nếu lỗi, coi là 0.
-        const donGia = parseFloat(String(t.giaBan || 0).replace(/[.,]/g, '')) || 0; 
-        
+        const donGia = parseFloat(String(t.giaBan || 0).replace(/[.,]/g, '')) || 0;
+
         const soLuong = selected[t.id] || 0; // Đảm bảo số lượng là số 0 nếu không tồn tại
 
         // Tính thành tiền
@@ -133,13 +133,12 @@ export default function BanhangScreen() {
           id: t.id,
           tenThuoc: t.ten,
           soLuong: soLuong,
-          donGia: donGia, 
+          donGia: donGia,
           thanhTien: thanhTien,
         };
       });
 
     // 2. Tính Tổng tiền bằng hàm reduce
-    // Hàm reduce này đảm bảo tính tổng chính xác từ các giá trị Number của thanhTien
     const total = calculatedItems.reduce((sum, item) => sum + item.thanhTien, 0);
 
     return { itemsToBuy: calculatedItems, tongTien: total };
@@ -161,7 +160,7 @@ export default function BanhangScreen() {
     try {
       setIsProcessing(true); // Bật trạng thái xử lý
 
-      // Lấy thông tin nhân viên
+      // 1. Lấy thông tin nhân viên
       const uid = auth.currentUser?.uid;
       let nhanVienName = "Unknown";
 
@@ -172,24 +171,25 @@ export default function BanhangScreen() {
         }
       }
 
-      // 1. Lưu hóa đơn
-      await addDoc(collection(db, "hoadons"), {
+      // 2. Lưu hóa đơn
+      const newInvoiceRef = await addDoc(collection(db, "hoadons"), { // 👈 Giữ lại tham chiếu
         ngayBan: new Date(),
         items: itemsToBuy,
         tongTien,
         nhanVien: nhanVienName,
         khachHang: khachHang || "Khách lẻ",
+        sdtKhachHang: khachHang || "Khách lẻ", // THÊM TRƯỜNG NÀY ĐỂ QUERY LỊCH SỬ
         nhanVienUid: uid,
       });
 
-      // 2. Cập nhật số lượng trong kho
+      // 3. Cập nhật số lượng trong kho
       for (const item of itemsToBuy) {
         const thuocRef = doc(db, "thuocs", item.id);
         const thuoc = thuocs.find((t) => t.id === item.id);
 
         if (thuoc) {
           // Ép kiểu số lượng tồn kho thành Number trước khi trừ
-          const soLuongHienTai = parseFloat(String(thuoc.soluong || 0)) || 0; 
+          const soLuongHienTai = parseFloat(String(thuoc.soluong || 0)) || 0;
           const newSoLuong = soLuongHienTai - item.soLuong;
 
           // Chỉ cập nhật nếu số lượng mới hợp lệ
@@ -202,13 +202,43 @@ export default function BanhangScreen() {
           }
         }
       }
+      
+      // 🌟🌟🌟 4. LOGIC CẬP NHẬT TỔNG TIỀN MUA CHO KHÁCH HÀNG (CRM) 🌟🌟🌟
+      if (khachHang && khachHang !== "Khách lẻ") { 
+          // 1. Truy vấn khách hàng theo SĐT (giá trị của biến khachHang)
+          const customerQuery = query(
+              collection(db, "khachhangs"),
+              where('sdt', '==', khachHang) // Tìm KH theo trường sdt
+          );
+          const customerSnapshot = await getDocs(customerQuery);
+          
+          if (!customerSnapshot.empty) {
+              // Lấy KH đầu tiên tìm thấy
+              const customerDoc = customerSnapshot.docs[0];
+              const customerData = customerDoc.data();
+
+              // 2. Lấy tổng tiền hiện tại, đảm bảo an toàn với số 0
+              const currentTotal = parseFloat(String(customerData.tongTienMua || 0)) || 0;
+              const newTotal = currentTotal + tongTien; // Cộng thêm tổng tiền hóa đơn vừa tạo
+
+              // 3. Cập nhật trường tongTienMua
+              await updateDoc(customerDoc.ref, {
+                  tongTienMua: newTotal,
+              });
+              console.log(`Đã cập nhật Tổng Tiền Mua cho KH: ${khachHang}. Mới: ${newTotal}`);
+          } else {
+              // Xử lý trường hợp không tìm thấy khách hàng (Không cập nhật)
+              console.warn(`Không tìm thấy khách hàng với SĐT/ID: ${khachHang} để cập nhật CRM.`);
+          }
+      }
+      // ------------------------------------------------------------------
 
       Alert.alert(
         "✅ Bán hàng thành công!",
-        `Đã tạo hóa đơn với tổng tiền: ${tongTien.toLocaleString()} VNĐ`
+        `Đã tạo hóa đơn ${newInvoiceRef.id} với tổng tiền: ${tongTien.toLocaleString()} VNĐ`
       );
 
-      // 3. RESET TRẠNG THÁI
+      // 5. RESET TRẠNG THÁI
       setSelected({});
       setKhachHang("");
       setSearchTerm("");
@@ -238,7 +268,7 @@ export default function BanhangScreen() {
 
     const donViLon = String(item.donVi || item.donViTinh || "Không rõ");
     const donViBanLe = String(item.donViNho || item.donViTinh || "Không rõ");
-    
+
     // Ép kiểu giá bán để hiển thị, nếu lỗi thì hiển thị 0
     const priceForDisplay = parseFloat(String(item.giaBan || 0).replace(/[.,]/g, '')) || 0;
 

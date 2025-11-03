@@ -1,16 +1,16 @@
 // app/screens/Taikhoan.tsx
-import { Ionicons } from "@expo/vector-icons"; 
+import { Ionicons } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import {
   onAuthStateChanged,
   signOut,
   updatePassword,
-} from "firebase/auth"; 
+} from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator, 
+  ActivityIndicator,
   Alert,
   Image,
   Modal,

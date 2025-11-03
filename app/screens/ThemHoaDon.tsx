@@ -12,9 +12,14 @@ import { useRoute, useNavigation, RouteProp } from "@react-navigation/native";
 import {
   addDoc,
   updateDoc,
+  // 🌟 THÊM CÁC HÀM CẦN THIẾT CHO TRUY VẤN
+  getDoc,
   doc,
   collection,
   serverTimestamp,
+  query,
+  where,
+  getDocs,
 } from "firebase/firestore";
 import { db } from "../../firebaseConfig";
 import { RootStackParamList } from "../../types";
@@ -36,9 +41,7 @@ export default function ThemHoaDonScreen() {
 
   const [khachHang, setKhachHang] = useState(editingData?.khachHang || "");
   const [nhanVien, setNhanVien] = useState(editingData?.nhanVien || "");
-  const [giamGia, setGiamGia] = useState(
-    editingData?.giamGia?.toString() || "0"
-  );
+  const [giamGia, setGiamGia] = useState(editingData?.giamGia?.toString() || "0");
   const [thue, setThue] = useState(editingData?.thue?.toString() || "0");
   const [items, setItems] = useState<ItemType[]>(editingData?.items || []);
 
@@ -46,15 +49,11 @@ export default function ThemHoaDonScreen() {
   const [soLuong, setSoLuong] = useState("");
   const [donGia, setDonGia] = useState("");
 
-  // ✅ Tính tổng tiền
-  const tongTienHang = items.reduce(
-    (sum, i) => sum + i.soLuong * i.donGia,
-    0
-  );
-  const tongCong =
-    tongTienHang - Number(giamGia || 0) + Number(thue || 0);
+  // ✅ Tính tổng tiền hóa đơn
+  const tongTienHang = items.reduce((sum, i) => sum + i.soLuong * i.donGia, 0);
+  const tongCong = tongTienHang - Number(giamGia || 0) + Number(thue || 0);
 
-  // ✅ Thêm thuốc
+  // ✅ Thêm thuốc vào danh sách
   const handleAddItem = () => {
     if (!tenThuoc || !soLuong || !donGia) {
       Alert.alert("⚠️ Lỗi", "Vui lòng nhập đầy đủ thông tin thuốc");
@@ -76,11 +75,16 @@ export default function ThemHoaDonScreen() {
     setItems(updated);
   };
 
-  // ✅ Lưu hóa đơn
+  // ✅ Lưu hóa đơn + cập nhật tổng chi tiêu khách hàng
   const handleSaveInvoice = async () => {
     try {
+      if (!khachHang) {
+        Alert.alert("⚠️ Lỗi", "Vui lòng nhập khách hàng trước khi lưu!");
+        return;
+      }
+
       if (editingData) {
-        // Cập nhật
+        // ✅ Cập nhật hóa đơn
         await updateDoc(doc(db, "hoadons", editingData.id), {
           khachHang,
           nhanVien,
@@ -91,7 +95,7 @@ export default function ThemHoaDonScreen() {
         });
         Alert.alert("✅ Thành công", "Cập nhật hóa đơn thành công!");
       } else {
-        // Tạo mới
+        // --- 1. Thêm hóa đơn mới ---
         await addDoc(collection(db, "hoadons"), {
           khachHang,
           nhanVien,
@@ -101,8 +105,30 @@ export default function ThemHoaDonScreen() {
           items,
           ngayBan: serverTimestamp(),
         });
-        Alert.alert("✅ Thành công", "Thêm hóa đơn mới thành công!");
+
+        // --- 2. CẬP NHẬT tongTienMua CỦA KHÁCH HÀNG (CRM) ---
+        // 🚨 SỬA LỖI 1: Thay thế doc() bằng query() và where()
+        // 🚨 SỬA LỖI 2: Đổi tên collection từ "khachhang" thành "khachhangs"
+        const customerQuery = query(
+          collection(db, "khachhangs"), // Tên collection chính xác
+          where("sdt", "==", khachHang) // Giả định khachHang là SĐT
+        );
+
+        const customerSnapshot = await getDocs(customerQuery);
+
+        if (!customerSnapshot.empty) {
+          const customerDoc = customerSnapshot.docs[0];
+          const currentTotal = customerDoc.data().tongTienMua || 0;
+          
+          await updateDoc(customerDoc.ref, {
+            tongTienMua: currentTotal + tongCong,
+          });
+          Alert.alert("✅ Thành công", "Thêm hóa đơn & cập nhật khách hàng thành công!");
+        } else {
+          Alert.alert("⚠️ Cảnh báo", `Không tìm thấy khách hàng với SĐT/ID: ${khachHang} để cập nhật tổng tiền mua.`);
+        }
       }
+
       navigation.goBack();
     } catch (error) {
       console.error(error);
@@ -124,10 +150,10 @@ export default function ThemHoaDonScreen() {
         style={styles.input}
       />
       <TextInput
-        placeholder="🙍‍♂️ Khách hàng"
+        placeholder="🙍‍♂️ SĐT Khách hàng (Sử dụng SĐT để cập nhật CRM)"
         value={khachHang}
         onChangeText={setKhachHang}
-        style={styles.input}
+        style={[styles.input, { fontWeight: 'bold', borderColor: '#4a90e2' }]} // Nhấn mạnh đây là SĐT
       />
       <TextInput
         placeholder="💸 Giảm giá (VNĐ)"
@@ -150,21 +176,21 @@ export default function ThemHoaDonScreen() {
           placeholder="Tên thuốc"
           value={tenThuoc}
           onChangeText={setTenThuoc}
-          style={[styles.input, { flex: 1 }]}
+          style={[styles.input, { flex: 1, marginBottom: 0 }]}
         />
         <TextInput
           placeholder="SL"
           value={soLuong}
           onChangeText={setSoLuong}
           keyboardType="numeric"
-          style={[styles.input, { width: 60 }]}
+          style={[styles.input, { width: 60, marginBottom: 0 }]}
         />
         <TextInput
           placeholder="Đơn giá"
           value={donGia}
           onChangeText={setDonGia}
           keyboardType="numeric"
-          style={[styles.input, { width: 100 }]}
+          style={[styles.input, { width: 100, marginBottom: 0 }]}
         />
         <TouchableOpacity style={styles.addBtn} onPress={handleAddItem}>
           <Text style={{ color: "#fff" }}>➕</Text>
@@ -178,23 +204,23 @@ export default function ThemHoaDonScreen() {
         renderItem={({ item, index }) => (
           <View style={styles.item}>
             <View>
-              <Text>{item.tenThuoc}</Text>
-              <Text>
+              <Text style={{ fontWeight: '600' }}>{item.tenThuoc}</Text>
+              <Text style={{ fontSize: 13, color: '#666' }}>
                 {item.soLuong} x {item.donGia.toLocaleString()} ={" "}
-                {(item.soLuong * item.donGia).toLocaleString()} VNĐ
+                <Text style={{ fontWeight: 'bold', color: 'darkgreen' }}>
+                    {(item.soLuong * item.donGia).toLocaleString()} VNĐ
+                </Text>
               </Text>
             </View>
             <TouchableOpacity onPress={() => handleRemoveItem(index)}>
-              <Text style={{ color: "red" }}>❌</Text>
+              <Text style={{ color: "red", fontSize: 16 }}>❌</Text>
             </TouchableOpacity>
           </View>
         )}
       />
 
       {/* Tổng cộng */}
-      <Text style={styles.total}>
-        ✅ Tổng cộng: {tongCong.toLocaleString()} VNĐ
-      </Text>
+      <Text style={styles.total}>✅ Tổng cộng: {tongCong.toLocaleString()} VNĐ</Text>
 
       {/* Nút lưu */}
       <TouchableOpacity style={styles.saveBtn} onPress={handleSaveInvoice}>
@@ -225,12 +251,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
+    gap: 6
   },
   addBtn: {
     backgroundColor: "#4a90e2",
     padding: 12,
     borderRadius: 8,
-    marginLeft: 6,
+    // margin-left được chuyển thành gap trong addItemContainer
   },
   item: {
     backgroundColor: "#f8f8f8",
@@ -239,8 +266,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: 'center'
   },
-  total: { fontSize: 18, fontWeight: "bold", marginTop: 12, color: "green" },
+  total: { fontSize: 18, fontWeight: "bold", marginTop: 12, color: "green", textAlign: 'right', paddingRight: 5 },
   saveBtn: {
     backgroundColor: "#4a90e2",
     padding: 14,
