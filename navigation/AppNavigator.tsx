@@ -8,34 +8,37 @@ import React from "react";
 // ==========================
 // 📦 Import các màn hình chính
 // ==========================
-import BanHangScreen from "../app/screens/Banhang";
-import ChiTietHoaDonScreen from "../app/screens/ChiTietHoaDon";
-import ChiTietKhachHangScreen from "../app/screens/ChiTietKhachHangScreen"; 
-import ChiTietThuoc from "../app/screens/ChiTietThuoc";
-import DangKyNhanVien from "../app/screens/DangKyNhanVien";
-import DanhMucScreen from "../app/screens/DanhMuc";
-import DanhSachThuocScreen from "../app/screens/DanhSachThuoc";
-import DonViTinhScreen from "../app/screens/DonViTinh";
-import HoaDonScreen from "../app/screens/HoaDon";
+import BanHangScreen from "../app/screens/SalesScreen";
+import ChiTietHoaDonScreen from "../app/screens/InvoiceDetailScreen";
+import ChiTietKhachHangScreen from "../app/screens/CustomerDetailScreen";
+import ChiTietThuoc from "../app/screens/MedicineDetailScreen";
+import DangKyNhanVien from "../app/screens/EmployeeRegisterScreen";
+import DanhMucScreen from "../app/screens/CategoryScreen";
+import DanhSachThuocScreen from "../app/screens/MedicineListScreen";
+import DonViTinhScreen from "../app/screens/UnitOfMeasureScreen";
+import HoaDonScreen from "../app/screens/InvoiceScreen";
 import HomeScreen from "../app/screens/HomeScreen";
-import KhachHangScreen from "../app/screens/KhachHangScreen";
-import KiemKhoScreen from "../app/screens/KiemKho";
-import LichSuNhapKhoScreen from "../app/screens/LichSuNhapKho";
-import NhapKhoScreen from "../app/screens/NhapKho";
-import QuanLyNhanVienScreen from "../app/screens/QuanLyNhanVien";
-import QuanLyTonKhoScreen from "../app/screens/QuanLyTonKho";
+import KhachHangScreen from "../app/screens/CustomerScreen";
+import KiemKhoScreen from "../app/screens/InventoryCheckScreen";
+import LichSuNhapKhoScreen from "../app/screens/WarehouseImportHistoryScreen";
+import NhapKhoScreen from "../app/screens/ImportWarehouseScreen";
+import QuanLyNhanVienScreen from "../app/screens/EmployeeManagementScreen";
+import QuanLyTonKhoScreen from "../app/screens/InventoryManagementScreen";
 import StaffHomeScreen from "../app/screens/StaffHomeScreen";
-import TaiKhoanScreen from "../app/screens/Taikhoan";
-import ThemHoaDonScreen from "../app/screens/ThemHoaDon";
-import ThemThuocScreen from "../app/screens/ThemThuoc";
-import ThongKeScreen from "../app/screens/ThongKe";
-import ThuocTheoDanhMucScreen from "../app/screens/ThuocTheoDanhMuc";
-import XuatXuScreen from "../app/screens/XuatXu";
+import TaiKhoanScreen from "../app/screens/AccountScreen";
+import ThemHoaDonScreen from "../app/screens/AddInvoiceScreen";
+import ThemThuocScreen from "../app/screens/AddMedicineScreen";
+import ThongKeScreen from "../app/screens/StatisticScreen";
+import ThuocTheoDanhMucScreen from "../app/screens/MedicineByCategoryScreen";
+import XuatXuScreen from "../app/screens/OriginScreen";
 
 // IMPORT CÁC MÀN HÌNH CHẤM CÔNG & LƯƠNG
-import BangLuongScreen from "../app/screens/BangLuongScreen";
-import ChamCongScreen from "../app/screens/ChamCongScreen";
-import LichLamViecScreen from "../app/screens/LichLamViecScreen"; 
+import BangLuongScreen from "../app/screens/SalaryScreen";
+import ChamCongScreen from "../app/screens/AttendanceScreen";
+import LichLamViecScreen from "../app/screens/ScheduleScreen";
+
+// ⚙️ IMPORT MÀN HÌNH CÀI ĐẶT MỚI
+import SettingsScreen from "../app/screens/SettingsScreen";
 
 
 // ==========================
@@ -246,6 +249,13 @@ export default function AppNavigator() {
           name="StaffTabs"
           component={StaffTabs}
           options={{ headerShown: false }}
+        />
+        
+        {/* ⚙️ THÊM MÀN HÌNH SETTINGS VÀO ROOT STACK ĐỂ CÓ THỂ GỌI TỪ Profile/TaiKhoanScreen */}
+        <Stack.Screen
+          name="SettingsScreen" // Tên cần phải khớp với navigation.navigate('SettingsScreen')
+          component={SettingsScreen}
+          options={{ title: "Cài Đặt Ứng Dụng" }}
         />
 
         {/* MÀN HÌNH CHUNG / DEEP LINKS (Chỉ định nghĩa 1 lần tại đây)

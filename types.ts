@@ -20,14 +20,14 @@ export type Thuoc = {
   ten: string;
   soluong: number;
   hanSuDung: string;
-  giaBan?: number; 		// ✅ Giá bán thuốc
+  giaBan?: number; // ✅ Giá bán thuốc
   donViTinh?: string;
   xuatXu?: string;
   danhMuc?: string;
   ghiChu?: string;
-  imageUrl?: string; 		// ✅ Ảnh thuốc (URL)
-  qrValue?: string; 		// ✅ Mã QR tự sinh
-  ngayTao?: any; 		// ✅ Ngày tạo Firestore
+  imageUrl?: string; // ✅ Ảnh thuốc (URL)
+  qrValue?: string; // ✅ Mã QR tự sinh
+  ngayTao?: any; // ✅ Ngày tạo Firestore
 };
 
 // ===============================
@@ -54,6 +54,16 @@ export type HoaDon = {
 };
 
 // ===============================
+// 🔹 Định nghĩa kiểu dữ liệu Ca làm việc (Shift)
+// ===============================
+export type Shift = {
+  day: string; // Tên ngày (ví dụ: Thứ Hai)
+  start: string; // Giờ bắt đầu (HH:mm)
+  end: string; // Giờ kết thúc (HH:mm)
+};
+
+
+// ===============================
 // 🔹 Định nghĩa kiểu dữ liệu User (nhân viên)
 // ===============================
 export type User = {
@@ -64,7 +74,9 @@ export type User = {
 
   // 🔹 Thêm các trường mới cho HR
   salary?: number; // Lương cơ bản
-  shiftSchedule?: { day: string; start: string; end: string }[]; // Ca làm việc
+  allowance?: number; // Phụ cấp
+  shiftSchedule?: Shift[]; // Ca làm việc
+  createdAt?: any;
 };
 
 // ===============================
@@ -72,10 +84,10 @@ export type User = {
 // ===============================
 export type NhatKyNhap = {
   id: string;
-  thuocId: string; 		// ID thuốc liên quan
+  thuocId: string; // ID thuốc liên quan
   tenThuoc: string;
   soLuongNhap: number;
-  ngayNhap: any; 		// Firestore Timestamp
+  ngayNhap: any; // Firestore Timestamp
   nhanVien?: string;
   ghiChu?: string;
 };
@@ -85,8 +97,8 @@ export type NhatKyNhap = {
 // ===============================
 export type Attendance = {
   id?: string;
-  uid: string;          // ID nhân viên
-  date: string;         // YYYY-MM-DD
+  uid: string; // ID nhân viên
+  date: string; // YYYY-MM-DD
   checkIn: string | null;
   checkOut: string | null;
 };
@@ -95,13 +107,16 @@ export type Attendance = {
 // 🔹 RootStackParamList (TẤT CẢ MÀN HÌNH TRONG APP)
 // ===============================
 export type RootStackParamList = {
+  // ⚙️ MÀN HÌNH MỚI: Cài đặt (giải quyết lỗi TypeScript)
+  SettingsScreen: undefined;
+
   // 🧭 Đăng nhập & đăng ký
   Login: undefined;
   SignUp: undefined;
   AdminTabs: undefined;
   StaffTabs: undefined;
 
-  // 📱 Tabs con
+  // 📱 Tabs con (Các Tab screens chỉ nên là Root Stack nếu chúng không phải là một Stack Navigator)
   Main: undefined;
   Profile: undefined;
   HomeTab: undefined;
@@ -110,8 +125,8 @@ export type RootStackParamList = {
   StaffHomeTab: undefined;
 
   // 🏠 Trang chủ
-  Home: undefined; 		// Trang chủ admin
-  StaffHome: undefined; 	// Trang chủ nhân viên
+  Home: undefined; // Trang chủ admin
+  StaffHome: undefined; // Trang chủ nhân viên
 
   // ⚕️ Thuốc
   ThemThuoc: { id?: string } | undefined;
@@ -156,4 +171,5 @@ export type RootStackParamList = {
   ChamCong: { user: User };
   BangLuong: { user: User };
   LichLamViec: { user: User };
+  SetupLichLamViec: { user: User }; // ✅ ĐÃ CÓ KEY NÀY
 };
