@@ -150,7 +150,7 @@ export default function ThemHoaDonScreen() {
         style={styles.input}
       />
       <TextInput
-        placeholder="🙍‍♂️ SĐT Khách hàng (Sử dụng SĐT để cập nhật CRM)"
+        placeholder="🙍‍♂️ SĐT Khách hàng "
         value={khachHang}
         onChangeText={setKhachHang}
         style={[styles.input, { fontWeight: 'bold', borderColor: '#4a90e2' }]} // Nhấn mạnh đây là SĐT

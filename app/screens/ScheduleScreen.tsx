@@ -1,31 +1,47 @@
 import React, { useEffect, useState } from "react";
-import { View, Text, FlatList, StyleSheet, SafeAreaView, TouchableOpacity, ActivityIndicator } from "react-native";
+import { 
+    View, 
+    Text, 
+    FlatList, 
+    StyleSheet, 
+    SafeAreaView, 
+    TouchableOpacity, 
+    ActivityIndicator,
+    Alert 
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { db } from "../../firebaseConfig"; // Đảm bảo firebaseConfig.ts có db
 import { doc, onSnapshot } from "firebase/firestore"; // Import Firestore functions
+import { db } from "../../firebaseConfig"; // Đảm bảo firebaseConfig.ts có db
+import type { User, Shift } from "../../types"; // ⭐ Import type từ file types
 
-interface Shift {
-    day: string; // Tên ngày (ví dụ: Thứ Hai)
-    start: string; // Giờ bắt đầu (ví dụ: 08:00)
-    end: string; // Giờ kết thúc (ví dụ: 17:00)
+// Khai báo kiểu dữ liệu cho route.params
+interface LichLamViecProps {
+    route: {
+        params: {
+            user: User; // Sử dụng type User từ types.ts
+        };
+    };
+    navigation: any;
 }
 
-interface UserInfo {
-    uid: string; // Cần uid để fetch data
-    name: string;
-    shiftSchedule?: Shift[]; 
-    [key: string]: any;
-}
 
-export default function LichLamViecScreen({ route, navigation }: any) {
-    const { user } = route.params as { user: UserInfo };
+export default function LichLamViecScreen({ route, navigation }: LichLamViecProps) {
+    // Ép kiểu cho route.params để TypeScript hiểu được cấu trúc
+    const { user } = route.params; 
+    
     // Khởi tạo state cho lịch làm việc và loading
     const [schedule, setSchedule] = useState<Shift[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        // Cập nhật tiêu đề màn hình với tên nhân viên
+        if (user?.name) {
+            navigation.setOptions({ title: `Lịch làm việc của ${user.name}` });
+        }
+        
         if (!user.uid) {
             setIsLoading(false);
+            Alert.alert("Lỗi", "Không tìm thấy UID nhân viên.");
             return;
         }
 
@@ -33,73 +49,74 @@ export default function LichLamViecScreen({ route, navigation }: any) {
         const userRef = doc(db, "users", user.uid);
         const unsub = onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
-                const userData = docSnap.data() as UserInfo;
-                // Lấy schedule, đảm bảo là mảng rỗng nếu không có
-                setSchedule((userData.shiftSchedule as Shift[] | undefined) || []);
+                const userData = docSnap.data() as User;
+                // Nếu shiftSchedule tồn tại, cập nhật state
+                const currentSchedule = userData.shiftSchedule || [];
+                setSchedule(currentSchedule);
+            } else {
+                setSchedule([]); // Không có dữ liệu lịch làm việc
             }
             setIsLoading(false);
         }, (error) => {
-            console.error("Lỗi fetching schedule:", error);
+            console.error("Lỗi khi fetch lịch làm việc:", error);
+            Alert.alert("Lỗi", "Không thể tải lịch làm việc.");
             setIsLoading(false);
         });
 
         return () => unsub();
-    }, [user.uid]);
+    }, [user.uid, user.name, navigation]);
 
-    const renderItem = ({ item }: { item: Shift }) => {
-        // Nếu giờ bắt đầu và kết thúc giống nhau (ví dụ: 00:00 - 00:00), coi là nghỉ
-        const isDayOff = item.start === item.end;
 
-        return (
-            <View style={styles.item}>
-                <Text style={styles.dayText}>🗓 {item.day}</Text>
-                <Text style={[styles.shiftText, { color: isDayOff ? '#d0021b' : '#333' }]}>
-                    {isDayOff 
-                        ? "NGHỈ"
-                        : (<>
-                            <Text style={{fontWeight: 'bold', color: '#007bff'}}>{item.start}</Text> 
-                            - 
-                            <Text style={{fontWeight: 'bold', color: '#d0021b'}}>{item.end}</Text>
-                          </>)
-                    }
-                </Text>
-            </View>
-        );
-    };
+    // Hàm định dạng thời gian HH:mm (đơn giản, giả sử input đã sạch)
+    const formatTime = (time: string) => time || "Ngày nghỉ";
+
+    const isDayOff = (shift: Shift) => shift.start === "Ngày nghỉ" && shift.end === "Ngày nghỉ";
     
-    // Hiển thị loading
+    // Hàm chuyển sang màn hình thiết lập lịch
+    const handleSetup = () => {
+        navigation.navigate("SetupLichLamViec", { user: user });
+    };
+
     if (isLoading) {
         return (
             <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#4a90e2" />
-                <Text>Đang tải lịch làm việc...</Text>
+                <ActivityIndicator size="large" color="#007bff" />
+                <Text style={{ marginTop: 10 }}>Đang tải lịch làm việc...</Text>
             </View>
         );
     }
 
     return (
-        <SafeAreaView style={{flex: 1}}>
-            <View style={styles.container}>
-                <Text style={styles.title}>🗓 Lịch làm việc: {user.name}</Text>
-                
-                {/* ⭐ Nút Thêm/Chỉnh sửa (Chuyển đến màn hình SetupLichLamViec) */}
-                <TouchableOpacity 
-                    style={styles.setupButton}
-                    onPress={() => navigation.navigate("SetupLichLamViec", { user })}
-                >
-                    <Ionicons name="settings-outline" size={20} color="#fff" />
-                    <Text style={styles.setupButtonText}>{schedule.length > 0 ? "Chỉnh sửa Lịch làm việc" : "Thiết lập Lịch làm việc"}</Text>
-                </TouchableOpacity>
+        <SafeAreaView style={styles.container}>
+            <TouchableOpacity style={styles.setupButton} onPress={handleSetup}>
+                <Ionicons name="settings-outline" size={20} color="#fff" />
+                <Text style={styles.setupButtonText}>Thiết Lập Lịch Làm Việc</Text>
+            </TouchableOpacity>
 
-                <FlatList
-                    data={schedule}
-                    keyExtractor={(item) => item.day}
-                    renderItem={renderItem}
-                    ListEmptyComponent={() => (
-                        <Text style={styles.emptyText}>Chưa có lịch làm việc được thiết lập.</Text>
-                    )}
-                />
-            </View>
+            <FlatList
+                data={schedule}
+                keyExtractor={(item, index) => item.day + index}
+                renderItem={({ item }) => (
+                    <View style={[styles.item, isDayOff(item) && styles.dayOffItem]}>
+                        <View>
+                            <Text style={styles.dayTitle}>{item.day}</Text>
+                        </View>
+                        <View style={{ alignItems: 'flex-end' }}>
+                            {isDayOff(item) ? (
+                                <Text style={styles.timeTextOff}>NGHỈ</Text>
+                            ) : (
+                                <Text style={styles.timeText}>{formatTime(item.start)} - {formatTime(item.end)}</Text>
+                            )}
+                        </View>
+                    </View>
+                )}
+                ListEmptyComponent={() => (
+                    <View style={{ padding: 20, alignItems: 'center' }}>
+                        <Text>Nhân viên chưa có lịch làm việc được thiết lập.</Text>
+                        <Text>Vui lòng nhấn nút "Thiết Lập Lịch Làm Việc".</Text>
+                    </View>
+                )}
+            />
         </SafeAreaView>
     );
 }
@@ -123,6 +140,12 @@ const styles = StyleSheet.create({
         padding: 12,
         borderRadius: 8,
         marginBottom: 20,
+        // Hiệu ứng nhẹ
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 3, 
     },
     setupButtonText: {
         color: '#fff',
@@ -143,21 +166,26 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 1.41,
         elevation: 2,
+        borderLeftWidth: 4,
+        borderLeftColor: '#4a90e2', // Màu mặc định cho ngày làm việc
     },
-    dayText: {
+    dayOffItem: {
+        backgroundColor: '#fff0f0', // Nền nhẹ hơn cho ngày nghỉ
+        borderLeftColor: '#f00', // Border đỏ cho ngày nghỉ
+    },
+    dayTitle: {
         fontSize: 16,
         fontWeight: '600',
         color: '#333',
     },
-    shiftText: {
+    timeText: {
         fontSize: 16,
         color: '#555',
+        fontWeight: '500',
     },
-    emptyText: {
-        textAlign: 'center',
-        marginTop: 30,
+    timeTextOff: {
         fontSize: 16,
-        color: '#999',
-        fontStyle: 'italic',
-    }
+        color: '#f00',
+        fontWeight: '600',
+    },
 });

@@ -1,5 +1,3 @@
-// BanhangScreen.tsx — Màn hình bán hàng chính
-
 import {
     addDoc,
     collection,
@@ -24,17 +22,17 @@ import {
     Modal,
     ScrollView,
     ActivityIndicator,
-    KeyboardAvoidingView,
     Platform,
+    KeyboardAvoidingView,
 } from "react-native";
 import { auth, db } from "../../firebaseConfig";
 
-// --- Kiểu dữ liệu (Mặc định cho các trường của thuốc)
+// --- Kiểu dữ liệu
 interface Thuoc {
     id: string;
     ten: string;
-    soluong: string | number; // Số lượng tồn kho (có thể là chuỗi hoặc số)
-    giaBan: string | number; // Giá bán (có thể là chuỗi hoặc số) - Là giá bán theo ĐV LỚN (vd: Lọ)
+    soluong: string | number; // Số lượng tồn kho (ĐANG LƯU theo ĐV NHỎ/BÁN LẺ)
+    giaBan: string | number; // Giá bán (Là giá bán theo ĐV LỚN, vd: Lọ)
     donVi: string; // Đơn vị LỚN (vd: Lọ, Hộp)
     donViNho: string; // Đơn vị BÁN LẺ (vd: Viên)
     donViTinh: string; // Mặc định (có thể là ĐV LỚN)
@@ -42,14 +40,27 @@ interface Thuoc {
     [key: string]: any;
 }
 
+// 🔥 State mới để theo dõi đơn vị bán được chọn cho mỗi thuốc
+type SellingUnit = 'large' | 'small';
+
 export default function BanhangScreen() {
     const [thuocs, setThuocs] = useState<Thuoc[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [selected, setSelected] = useState<Record<string, number>>({});
+    // Lưu số lượng bán. Key là ID, Value là số lượng (theo đơn vị đang được chọn)
+    const [selected, setSelected] = useState<Record<string, number>>({}); 
     const [khachHang, setKhachHang] = useState<string>(""); 
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [isProcessing, setIsProcessing] = useState(false);
+    
+    // 🔥 State mới: Lưu đơn vị bán hiện tại của từng thuốc (Mặc định là 'large')
+    const [unitMode, setUnitMode] = useState<Record<string, SellingUnit>>({}); 
+    
+    // Hàm làm tròn tiền Việt Nam (ví dụ: làm tròn đến hàng nghìn, trăm, hoặc giữ nguyên)
+    const roundVND = (price: number): number => {
+        // Tùy chỉnh: Làm tròn đến hàng đơn vị (vì tiền tệ Việt Nam không có tiền lẻ nhỏ hơn 1đ)
+        return Math.round(price); 
+    };
 
     // 1. FETCH DỮ LIỆU THUỐC
     useEffect(() => {
@@ -73,42 +84,69 @@ export default function BanhangScreen() {
         return () => unsub();
     }, []);
 
+    // 🔥 LOGIC CHUYỂN ĐỔI ĐƠN VỊ BÁN
+    const toggleUnitMode = (id: string) => {
+        setUnitMode((prev) => {
+            const currentMode = prev[id] || 'large';
+            const newMode = currentMode === 'large' ? 'small' : 'large';
+            
+            // 🔥 Reset số lượng đã chọn khi chuyển đơn vị để tránh nhầm lẫn
+            setSelected((prevSelected) => {
+                const newState = { ...prevSelected };
+                delete newState[id];
+                return newState;
+            });
+
+            return {
+                ...prev,
+                [id]: newMode,
+            };
+        });
+    };
+
     // --- 2. LOGIC XỬ LÝ SỐ LƯỢNG & KIỂM TRA TỒN KHO ---
     const handleQuantityChange = (id: string, value: string) => {
-        // 1. Chỉ giữ lại số nguyên
         const num = parseInt(value.replace(/[^0-9]/g, ''));
-
-        // 2. Ép kiểu giá trị bán (0 nếu không hợp lệ)
         let soLuongBan = isNaN(num) || num < 0 ? 0 : num;
-
+        
         const item = thuocs.find((t) => t.id === id);
+        if (!item) return;
 
-        // 3. Ép kiểu tồn kho an toàn (LƯU Ý: tồn kho đang lưu theo ĐV NHỎ/Bán lẻ)
-        const tonKho = parseFloat(String(item?.soluong || 0)) || 0;
+        const heSoQuyDoi = (item.heSoQuyDoi as number) || 1;
+        const tonKhoLe = parseFloat(String(item.soluong || 0)) || 0;
+        const currentMode = unitMode[id] || 'large';
 
-        // 4. KIỂM TRA TỒN KHO:
-        if (soLuongBan > tonKho) {
+        let maxQuantity = 0;
+        let unitName = "";
+
+        // TÍNH TỒN KHO TỐI ĐA DỰA TRÊN ĐƠN VỊ ĐANG BÁN
+        if (currentMode === 'large') {
+            // Tồn kho LỚN (làm tròn xuống)
+            maxQuantity = heSoQuyDoi > 0 ? Math.floor(tonKhoLe / heSoQuyDoi) : 0;
+            unitName = item.donVi || item.donViTinh || 'Đơn vị lớn';
+        } else {
+            // Tồn kho LẺ (là giá trị trong DB)
+            maxQuantity = tonKhoLe;
+            unitName = item.donViNho || item.donViTinh || 'Đơn vị lẻ';
+        }
+        
+        // KIỂM TRA TỒN KHO:
+        if (soLuongBan > maxQuantity) {
             Alert.alert(
                 "Lỗi tồn kho",
-                `Số lượng bán (${soLuongBan}) vượt quá số lượng còn (${tonKho}).`
+                `Số lượng bán (${soLuongBan} ${unitName}) vượt quá số lượng còn (${maxQuantity} ${unitName}).`
             );
-            soLuongBan = tonKho; // Giới hạn số lượng bán bằng tồn kho
+            soLuongBan = maxQuantity; // Giới hạn số lượng bán bằng tồn kho
         }
 
-        // 5. Cập nhật state, chỉ khi số lượng > 0 hoặc khi nhập/xóa
+        // Cập nhật state
         if (soLuongBan > 0 || value === "") {
             setSelected((prev) => ({
                 ...prev,
                 [id]: soLuongBan,
             }));
-        } else if (soLuongBan === 0 && value !== "") {
-            // Nếu người dùng nhập ký tự không hợp lệ, giữ nguyên giá trị cũ
-            setSelected((prev) => ({
-                ...prev,
-                [id]: 0,
-            }));
         } else {
-            // Xóa khỏi selected nếu giá trị là 0
+            // Xóa khỏi selected nếu giá trị là 0 hoặc không hợp lệ (nhưng đã được set là 0 ở trên)
             setSelected((prev) => {
                 const newState = { ...prev };
                 delete newState[id];
@@ -117,39 +155,50 @@ export default function BanhangScreen() {
         }
     };
 
-    // --- 3. CHUẨN BỊ DỮ LIỆU HÓA ĐƠN & TÍNH TỔNG TIỀN (SỬ DỤNG GIÁ BÁN LẺ) ---
+    // --- 3. CHUẨN BỊ DỮ LIỆU HÓA ĐƠN & TÍNH TỔNG TIỀN ---
     const { itemsToBuy, tongTien } = useMemo(() => {
-        // 1. Tính toán chi tiết từng mặt hàng
         const calculatedItems = thuocs
-            .filter((t) => selected[t.id] > 0) // Chỉ lấy các mặt hàng có số lượng > 0
+            .filter((t) => selected[t.id] > 0) 
             .map((t) => {
+                const soLuongBan = selected[t.id] || 0;
                 const heSoQuyDoi = (t.heSoQuyDoi as number) || 1;
-                
-                // *** 1A. TÍNH GIÁ BÁN LẺ (Giá/Viên) ***
-                // Giá bán được lưu là giá LỚN (VD: Lọ). Chia cho hệ số quy đổi để ra giá BÁN LẺ.
                 const donGiaLon = parseFloat(String(t.giaBan || 0).replace(/[.,]/g, '')) || 0;
-                const donGiaLe = heSoQuyDoi > 0 ? donGiaLon / heSoQuyDoi : donGiaLon;
+                
+                // 🔥 Xác định đơn vị và đơn giá dựa trên unitMode
+                const currentMode = unitMode[t.id] || 'large';
+                let donGia = 0;
+                let donViBan = '';
 
-                const soLuong = selected[t.id] || 0; // Số lượng đang bán (là ĐV Bán lẻ)
+                if (currentMode === 'large') {
+                    // BÁN THEO ĐƠN VỊ LỚN
+                    donGia = donGiaLon; 
+                    donViBan = t.donVi || t.donViTinh || 'Đơn vị lớn';
+                } else {
+                    // BÁN THEO ĐƠN VỊ LẺ
+                    let donGiaGocLe = heSoQuyDoi > 0 ? donGiaLon / heSoQuyDoi : donGiaLon;
+                    donGia = roundVND(donGiaGocLe); // 🔥 LÀM TRÒN GIÁ BÁN LẺ
+                    donViBan = t.donViNho || t.donViTinh || 'Đơn vị lẻ';
+                }
 
-                // Tính thành tiền: Thành tiền = Giá bán lẻ * Số lượng bán lẻ
-                const thanhTien = donGiaLe * soLuong;
+                // Tính thành tiền
+                const thanhTien = donGia * soLuongBan;
 
                 return {
                     id: t.id,
                     tenThuoc: t.ten,
-                    soLuong: soLuong, // Số lượng bán lẻ
-                    donGia: donGiaLe, // Đơn giá bán lẻ
+                    soLuong: soLuongBan, 
+                    donGia: donGia, 
                     thanhTien: thanhTien,
-                    donViBan: t.donViNho || t.donViTinh || 'Đơn vị',
+                    donViBan: donViBan,
+                    heSoQuyDoi: heSoQuyDoi, // Cần cho việc trừ tồn kho
+                    unitMode: currentMode, // Cần cho việc trừ tồn kho
                 };
             });
 
-        // 2. Tính Tổng tiền bằng hàm reduce
         const total = calculatedItems.reduce((sum, item) => sum + item.thanhTien, 0);
 
         return { itemsToBuy: calculatedItems, tongTien: total };
-    }, [thuocs, selected]); // Phụ thuộc vào danh sách thuốc và số lượng chọn
+    }, [thuocs, selected, unitMode]); // Phụ thuộc vào unitMode
 
     // --- 4. XÁC NHẬN VÀ THỰC HIỆN TẠO HÓA ĐƠN ---
     const handleConfirmInvoice = () => {
@@ -170,7 +219,6 @@ export default function BanhangScreen() {
             // 1. Lấy thông tin nhân viên
             const uid = auth.currentUser?.uid;
             let nhanVienName = "Unknown";
-
             if (uid) {
                 const userDoc = await getDoc(doc(db, "users", uid));
                 if (userDoc.exists()) {
@@ -179,9 +227,18 @@ export default function BanhangScreen() {
             }
 
             // 2. Lưu hóa đơn
+            const itemsToSave = itemsToBuy.map(item => ({ 
+                tenThuoc: item.tenThuoc,
+                soLuong: item.soLuong,
+                donGia: item.donGia,
+                thanhTien: item.thanhTien,
+                donViBan: item.donViBan,
+                id: item.id
+            }));
+            
             const newInvoiceRef = await addDoc(collection(db, "hoadons"), { 
                 ngayBan: new Date(),
-                items: itemsToBuy,
+                items: itemsToSave,
                 tongTien,
                 nhanVien: nhanVienName,
                 khachHang: khachHang || "Khách lẻ",
@@ -189,18 +246,29 @@ export default function BanhangScreen() {
                 nhanVienUid: uid,
             });
 
-            // 3. Cập nhật số lượng trong kho (Số lượng tồn kho là ĐV NHỎ/Bán lẻ)
+            // 3. Cập nhật số lượng trong kho (trừ theo Đơn vị NHỎ/LẺ)
             for (const item of itemsToBuy) {
                 const thuocRef = doc(db, "thuocs", item.id);
                 const thuoc = thuocs.find((t) => t.id === item.id);
 
                 if (thuoc) {
-                    const soLuongHienTai = parseFloat(String(thuoc.soluong || 0)) || 0;
-                    const newSoLuong = soLuongHienTai - item.soLuong; // Trừ số lượng bán lẻ
-
-                    if (newSoLuong >= 0) {
-                        await updateDoc(thuocRef, { soluong: newSoLuong });
+                    const soLuongHienTaiLe = parseFloat(String(thuoc.soluong || 0)) || 0;
+                    
+                    let soLuongCanTruLe = 0;
+                    if (item.unitMode === 'large') {
+                        // Nếu bán ĐV LỚN: Số lượng LẺ cần trừ = Số lượng LỚN * Hệ số
+                        soLuongCanTruLe = item.soLuong * item.heSoQuyDoi; 
                     } else {
+                        // Nếu bán ĐV LẺ: Số lượng LẺ cần trừ = Số lượng LẺ
+                        soLuongCanTruLe = item.soLuong;
+                    }
+                    
+                    const newSoLuongLe = soLuongHienTaiLe - soLuongCanTruLe; 
+
+                    if (newSoLuongLe >= 0) {
+                        await updateDoc(thuocRef, { soluong: newSoLuongLe }); 
+                    } else {
+                        // Dù đã check tồn kho, đây là lớp bảo vệ cuối cùng
                         console.warn(
                             `Lỗi: Số lượng mới của ${item.tenThuoc} là âm. Bỏ qua cập nhật.`
                         );
@@ -208,7 +276,7 @@ export default function BanhangScreen() {
                 }
             }
             
-            // 4. LOGIC CẬP NHẬT TỔNG TIỀN MUA CHO KHÁCH HÀNG (CRM)
+            // 4. LOGIC CẬP NHẬT TỔNG TIỀN MUA CHO KHÁCH HÀNG (Giữ nguyên)
             if (khachHang && khachHang !== "Khách lẻ") { 
                 const customerQuery = query(
                     collection(db, "khachhangs"),
@@ -219,19 +287,13 @@ export default function BanhangScreen() {
                 if (!customerSnapshot.empty) {
                     const customerDoc = customerSnapshot.docs[0];
                     const customerData = customerDoc.data();
-
                     const currentTotal = parseFloat(String(customerData.tongTienMua || 0)) || 0;
                     const newTotal = currentTotal + tongTien; 
-
                     await updateDoc(customerDoc.ref, {
                         tongTienMua: newTotal,
                     });
-                    console.log(`Đã cập nhật Tổng Tiền Mua cho KH: ${khachHang}. Mới: ${newTotal}`);
-                } else {
-                    console.warn(`Không tìm thấy khách hàng với SĐT/ID: ${khachHang} để cập nhật CRM.`);
                 }
             }
-            // ------------------------------------------------------------------
 
             Alert.alert(
                 "✅ Bán hàng thành công!",
@@ -242,6 +304,7 @@ export default function BanhangScreen() {
             setSelected({});
             setKhachHang("");
             setSearchTerm("");
+            setUnitMode({}); // Reset đơn vị bán
         } catch (error) {
             console.error("Lỗi tạo hóa đơn:", error);
             Alert.alert(
@@ -253,38 +316,59 @@ export default function BanhangScreen() {
         }
     };
 
-    // --- 5. TÌM KIẾM ---
+    // --- 5. TÌM KIẾM (Giữ nguyên) ---
     const filteredThuocs = thuocs.filter((t) =>
         t.ten && String(t.ten).toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // --- GIAO DIỆN HIỂN THỊ (Sửa Lỗi Giá Bán Lẻ) ---
+    // --- GIAO DIỆN HIỂN THỊ ---
 
     const renderItem = ({ item }: { item: Thuoc }) => {
-        const currentStock = parseFloat(String(item.soluong || 0)) || 0; 
-        const isLowStock = currentStock <= 10 && currentStock > 0;
-        const isOutOfStock = currentStock <= 0;
+        const id = item.id;
+        const currentMode = unitMode[id] || 'large'; // Đơn vị hiện tại
+        const soLuongChon = selected[id];
 
-        const donViLon = String(item.donVi || item.donViTinh || "Không rõ");
-        const donViBanLe = String(item.donViNho || item.donViTinh || "Không rõ");
-
-        // Lấy giá bán LỚN và Hệ số Quy đổi
-        const donGiaLon = parseFloat(String(item.giaBan || 0).replace(/[.,]/g, '')) || 0;
         const heSoQuyDoi = (item.heSoQuyDoi as number) || 1;
 
-        // 🔥 TÍNH GIÁ BÁN LẺ (Giá/Viên)
-        const priceForDisplay = heSoQuyDoi > 0 ? donGiaLon / heSoQuyDoi : donGiaLon;
+        // Tồn kho LẺ (DB)
+        const currentStockLe = parseFloat(String(item.soluong || 0)) || 0; 
+        // Tồn kho LỚN (làm tròn xuống)
+        const currentStockLon = heSoQuyDoi > 0 ? Math.floor(currentStockLe / heSoQuyDoi) : 0; 
+        
+        const isLowStock = currentStockLon <= 10 && currentStockLon > 0;
+        const isOutOfStock = currentStockLe <= 0; // Check hết hàng theo đơn vị nhỏ nhất
 
+        const donViLon = String(item.donVi || item.donViTinh || "Hộp");
+        const donViBanLe = String(item.donViNho || item.donViTinh || "Viên");
+
+        // TÍNH TOÁN GIÁ VÀ TỒN KHO HIỂN THỊ DỰA TRÊN CHẾ ĐỘ
+        let displayPrice = 0;
+        let displayUnitName = '';
+        let displayStock = 0;
+        
+        const donGiaLon = parseFloat(String(item.giaBan || 0).replace(/[.,]/g, '')) || 0;
+        let donGiaGocLe = heSoQuyDoi > 0 ? donGiaLon / heSoQuyDoi : donGiaLon;
+
+        if (currentMode === 'large') {
+            displayPrice = donGiaLon;
+            displayUnitName = donViLon;
+            displayStock = currentStockLon;
+        } else {
+            // Hiển thị giá lẻ đã làm tròn
+            displayPrice = roundVND(donGiaGocLe);
+            displayUnitName = donViBanLe;
+            displayStock = currentStockLe;
+        }
+        
+        // Cần phải check xem có bán lẻ được không (heSoQuyDoi > 1)
+        const canSellSmall = heSoQuyDoi > 1;
 
         return (
             <View style={[styles.itemCard, isOutOfStock && styles.outOfStockCard]}>
                 <Text style={styles.name}>{item.ten || "Tên thuốc không rõ"}</Text>
-
-                {/* HIỂN THỊ ĐƠN VỊ LỚN */}
-                <Text style={{ color: "#666" }}>Đơn vị lớn: {donViLon}</Text>
-
-                {/* HIỂN THỊ ĐƠN VỊ BÁN LẺ/NHỎ */}
-                <Text style={{ color: "#666" }}>Đơn vị bán lẻ: {donViBanLe}</Text>
+                
+                <Text style={styles.unitDetail}>ĐV lớn: {donViLon} (Quy đổi: {heSoQuyDoi})</Text>
+                <Text style={styles.unitDetail}>ĐV bán lẻ: {donViBanLe}</Text>
 
                 <Text
                     style={{
@@ -293,8 +377,7 @@ export default function BanhangScreen() {
                         marginTop: 5,
                     }}
                 >
-                    {/* 🎯 SỬA LỖI: Hiển thị giá BÁN LẺ theo đơn vị BÁN LẺ */}
-                    Giá bán: {priceForDisplay.toLocaleString('vi-VN')} VNĐ / ({donViBanLe})
+                    Giá bán: {displayPrice.toLocaleString('vi-VN')} VNĐ / ({displayUnitName})
                 </Text>
 
                 <Text
@@ -304,26 +387,41 @@ export default function BanhangScreen() {
                         isOutOfStock && styles.outOfStockStockText,
                     ]}
                 >
-                    Tồn kho: {currentStock} ({donViBanLe})
+                    Tồn kho: {displayStock} ({displayUnitName})
+                    {currentMode === 'large' && heSoQuyDoi > 1 && ` (Kho: ${currentStockLe} ${donViBanLe})`}
                 </Text>
+
+                {/* 🔥 NÚT CHUYỂN ĐỔI ĐƠN VỊ */}
+                {canSellSmall && (
+                    <TouchableOpacity
+                        style={styles.unitToggle}
+                        onPress={() => toggleUnitMode(id)}
+                        disabled={isOutOfStock}
+                    >
+                        <Text style={styles.unitToggleText}>
+                            Đang bán theo: **{displayUnitName}** (Chạm để chuyển)
+                        </Text>
+                    </TouchableOpacity>
+                )}
+                
 
                 <TextInput
                     placeholder={
                         isOutOfStock
                             ? "Hết hàng"
-                            : `Số lượng bán (Đơn vị: ${donViBanLe})`
+                            : `Số lượng bán (Đơn vị: ${displayUnitName})` 
                     }
                     keyboardType="numeric"
                     style={[styles.input, isOutOfStock && styles.inputDisabled]}
                     editable={!isOutOfStock}
-                    value={selected[item.id] > 0 ? String(selected[item.id]) : ""}
-                    onChangeText={(text) => handleQuantityChange(item.id, text)}
+                    value={soLuongChon > 0 ? String(soLuongChon) : ""}
+                    onChangeText={(text) => handleQuantityChange(id, text)}
                 />
             </View>
         );
     };
 
-    // Modal Xác nhận Hóa đơn
+    // Modal Xác nhận Hóa đơn (Giữ nguyên)
     const InvoiceConfirmationModal = () => (
         <Modal
             animationType="fade"
@@ -410,7 +508,6 @@ export default function BanhangScreen() {
                     onChangeText={setKhachHang}
                 />
 
-                {/* Hiển thị Loading */}
                 {isLoading ? (
                     <View style={styles.loadingContainer}>
                         <ActivityIndicator size="large" color="#007bff" />
@@ -420,7 +517,7 @@ export default function BanhangScreen() {
                     <FlatList
                         data={filteredThuocs}
                         keyExtractor={(item) => String(item.id)}
-                        extraData={selected}
+                        extraData={[selected, unitMode]} // Thêm unitMode vào extraData
                         renderItem={renderItem}
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={{ paddingBottom: 100 }}
@@ -506,6 +603,11 @@ const styles = StyleSheet.create({
 
     name: { fontSize: 18, fontWeight: "bold", marginBottom: 4, color: "#4a90e2" },
 
+    unitDetail: {
+        color: "#666",
+        fontSize: 13,
+    },
+    
     stockText: {
         fontSize: 14,
         marginTop: 4,
@@ -533,7 +635,19 @@ const styles = StyleSheet.create({
         backgroundColor: "#eee",
     },
 
-    // Styles mới
+    // Styles cho nút chuyển đổi
+    unitToggle: {
+        backgroundColor: '#e6f7ff',
+        padding: 8,
+        borderRadius: 5,
+        marginTop: 10,
+        alignItems: 'center',
+    },
+    unitToggleText: {
+        color: '#1890ff',
+        fontWeight: '600',
+    },
+
     loadingContainer: {
         flex: 1,
         justifyContent: "center",
@@ -552,7 +666,6 @@ const styles = StyleSheet.create({
         color: "#999",
     },
 
-    // Styles cho phần Tóm tắt và Nút bán hàng cố định
     summaryBar: {
         flexDirection: "row",
         justifyContent: "space-between",
