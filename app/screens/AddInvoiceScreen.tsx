@@ -12,7 +12,6 @@ import { useRoute, useNavigation, RouteProp } from "@react-navigation/native";
 import {
   addDoc,
   updateDoc,
-  // 🌟 THÊM CÁC HÀM CẦN THIẾT CHO TRUY VẤN
   getDoc,
   doc,
   collection,
@@ -24,10 +23,12 @@ import {
 import { db } from "../../firebaseConfig";
 import { RootStackParamList } from "../../types";
 
+// 🔥 CẬP NHẬT: Thêm trường giaVon vào ItemType
 type ItemType = {
   tenThuoc: string;
   soLuong: number;
   donGia: number;
+  giaVon: number; // 🔥 THÊM GIÁ VỐN
 };
 
 type RouteProps = RouteProp<RootStackParamList, "ThemHoaDon">;
@@ -36,36 +37,51 @@ export default function ThemHoaDonScreen() {
   const route = useRoute<RouteProps>();
   const navigation = useNavigation();
 
-  // Nếu có dữ liệu từ ChiTietHoaDonScreen => Chế độ chỉnh sửa
   const editingData = route.params?.data;
 
   const [khachHang, setKhachHang] = useState(editingData?.khachHang || "");
   const [nhanVien, setNhanVien] = useState(editingData?.nhanVien || "");
   const [giamGia, setGiamGia] = useState(editingData?.giamGia?.toString() || "0");
   const [thue, setThue] = useState(editingData?.thue?.toString() || "0");
-  const [items, setItems] = useState<ItemType[]>(editingData?.items || []);
+  // 🔥 Lấy giaVon cho từng item nếu có (sẽ là 0 nếu không có)
+  const [items, setItems] = useState<ItemType[]>(
+    editingData?.items?.map((item: any) => ({
+      ...item,
+      giaVon: item.giaVon || 0, // Đảm bảo trường giaVon luôn có
+    })) || []
+  );
 
   const [tenThuoc, setTenThuoc] = useState("");
   const [soLuong, setSoLuong] = useState("");
   const [donGia, setDonGia] = useState("");
+  const [giaVon, setGiaVon] = useState(""); // 🔥 State mới cho Giá vốn
 
-  // ✅ Tính tổng tiền hóa đơn
+  // ✅ Tính toán các giá trị tổng
   const tongTienHang = items.reduce((sum, i) => sum + i.soLuong * i.donGia, 0);
   const tongCong = tongTienHang - Number(giamGia || 0) + Number(thue || 0);
+  
+  // 🔥 TÍNH TOÁN TỔNG GIÁ VỐN
+  const tongGiaVon = items.reduce((sum, i) => sum + i.soLuong * i.giaVon, 0);
 
   // ✅ Thêm thuốc vào danh sách
   const handleAddItem = () => {
-    if (!tenThuoc || !soLuong || !donGia) {
-      Alert.alert("⚠️ Lỗi", "Vui lòng nhập đầy đủ thông tin thuốc");
+    if (!tenThuoc || !soLuong || !donGia || !giaVon) { // 🔥 Check thêm giaVon
+      Alert.alert("⚠️ Lỗi", "Vui lòng nhập đầy đủ thông tin (kể cả Giá vốn)");
       return;
     }
     setItems([
       ...items,
-      { tenThuoc, soLuong: Number(soLuong), donGia: Number(donGia) },
+      {
+        tenThuoc,
+        soLuong: Number(soLuong),
+        donGia: Number(donGia),
+        giaVon: Number(giaVon), // 🔥 LƯU GIÁ VỐN
+      },
     ]);
     setTenThuoc("");
     setSoLuong("");
     setDonGia("");
+    setGiaVon(""); // 🔥 Reset Giá vốn
   };
 
   // ✅ Xóa 1 thuốc
@@ -83,35 +99,33 @@ export default function ThemHoaDonScreen() {
         return;
       }
 
+      // 🔥 Dữ liệu hóa đơn chung
+      const invoiceData = {
+        khachHang,
+        nhanVien,
+        giamGia: Number(giamGia || 0),
+        thue: Number(thue || 0),
+        tongTien: tongCong,
+        // 🔥 LƯU THÊM TỔNG GIÁ VỐN
+        tongGiaVon: tongGiaVon,
+        items,
+      };
+
       if (editingData) {
         // ✅ Cập nhật hóa đơn
-        await updateDoc(doc(db, "hoadons", editingData.id), {
-          khachHang,
-          nhanVien,
-          giamGia: Number(giamGia),
-          thue: Number(thue),
-          tongTien: tongCong,
-          items,
-        });
+        await updateDoc(doc(db, "hoadons", editingData.id), invoiceData);
         Alert.alert("✅ Thành công", "Cập nhật hóa đơn thành công!");
       } else {
         // --- 1. Thêm hóa đơn mới ---
         await addDoc(collection(db, "hoadons"), {
-          khachHang,
-          nhanVien,
-          giamGia: Number(giamGia),
-          thue: Number(thue),
-          tongTien: tongCong,
-          items,
+          ...invoiceData,
           ngayBan: serverTimestamp(),
         });
 
         // --- 2. CẬP NHẬT tongTienMua CỦA KHÁCH HÀNG (CRM) ---
-        // 🚨 SỬA LỖI 1: Thay thế doc() bằng query() và where()
-        // 🚨 SỬA LỖI 2: Đổi tên collection từ "khachhang" thành "khachhangs"
         const customerQuery = query(
-          collection(db, "khachhangs"), // Tên collection chính xác
-          where("sdt", "==", khachHang) // Giả định khachHang là SĐT
+          collection(db, "khachhangs"),
+          where("sdt", "==", khachHang)
         );
 
         const customerSnapshot = await getDocs(customerQuery);
@@ -119,13 +133,19 @@ export default function ThemHoaDonScreen() {
         if (!customerSnapshot.empty) {
           const customerDoc = customerSnapshot.docs[0];
           const currentTotal = customerDoc.data().tongTienMua || 0;
-          
+
           await updateDoc(customerDoc.ref, {
             tongTienMua: currentTotal + tongCong,
           });
-          Alert.alert("✅ Thành công", "Thêm hóa đơn & cập nhật khách hàng thành công!");
+          Alert.alert(
+            "✅ Thành công",
+            "Thêm hóa đơn & cập nhật khách hàng thành công!"
+          );
         } else {
-          Alert.alert("⚠️ Cảnh báo", `Không tìm thấy khách hàng với SĐT/ID: ${khachHang} để cập nhật tổng tiền mua.`);
+          Alert.alert(
+            "⚠️ Cảnh báo",
+            `Không tìm thấy khách hàng với SĐT/ID: ${khachHang} để cập nhật tổng tiền mua.`
+          );
         }
       }
 
@@ -139,7 +159,7 @@ export default function ThemHoaDonScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>
-        {editingData ? "✏️ Chỉnh sửa hóa đơn" : "➕ Thêm hóa đơn"}
+        {editingData ? "✏️ Chỉnh sửa hóa đơn" : "➕ Thêm hóa đơn thủ công"}
       </Text>
 
       {/* Nhập thông tin chung */}
@@ -153,7 +173,7 @@ export default function ThemHoaDonScreen() {
         placeholder="🙍‍♂️ SĐT Khách hàng "
         value={khachHang}
         onChangeText={setKhachHang}
-        style={[styles.input, { fontWeight: 'bold', borderColor: '#4a90e2' }]} // Nhấn mạnh đây là SĐT
+        style={[styles.input, { fontWeight: "bold", borderColor: "#4a90e2" }]}
       />
       <TextInput
         placeholder="💸 Giảm giá (VNĐ)"
@@ -186,11 +206,18 @@ export default function ThemHoaDonScreen() {
           style={[styles.input, { width: 60, marginBottom: 0 }]}
         />
         <TextInput
+          placeholder="Giá vốn" // 🔥 Ô nhập giá vốn
+          value={giaVon}
+          onChangeText={setGiaVon}
+          keyboardType="numeric"
+          style={[styles.input, { width: 90, marginBottom: 0, borderColor: 'orange' }]}
+        />
+        <TextInput
           placeholder="Đơn giá"
           value={donGia}
           onChangeText={setDonGia}
           keyboardType="numeric"
-          style={[styles.input, { width: 100, marginBottom: 0 }]}
+          style={[styles.input, { width: 90, marginBottom: 0 }]}
         />
         <TouchableOpacity style={styles.addBtn} onPress={handleAddItem}>
           <Text style={{ color: "#fff" }}>➕</Text>
@@ -204,11 +231,15 @@ export default function ThemHoaDonScreen() {
         renderItem={({ item, index }) => (
           <View style={styles.item}>
             <View>
-              <Text style={{ fontWeight: '600' }}>{item.tenThuoc}</Text>
-              <Text style={{ fontSize: 13, color: '#666' }}>
-                {item.soLuong} x {item.donGia.toLocaleString()} ={" "}
-                <Text style={{ fontWeight: 'bold', color: 'darkgreen' }}>
-                    {(item.soLuong * item.donGia).toLocaleString()} VNĐ
+              <Text style={{ fontWeight: "600" }}>{item.tenThuoc}</Text>
+              <Text style={{ fontSize: 13, color: "#666" }}>
+                Giá vốn:{" "}
+                <Text style={{ fontWeight: "bold", color: "#8B4513" }}>
+                  {(item.soLuong * item.giaVon).toLocaleString()} VNĐ
+                </Text>{" "}
+                | Bán: {item.soLuong} x {item.donGia.toLocaleString()} ={" "}
+                <Text style={{ fontWeight: "bold", color: "darkgreen" }}>
+                  {(item.soLuong * item.donGia).toLocaleString()} VNĐ
                 </Text>
               </Text>
             </View>
@@ -220,7 +251,26 @@ export default function ThemHoaDonScreen() {
       />
 
       {/* Tổng cộng */}
-      <Text style={styles.total}>✅ Tổng cộng: {tongCong.toLocaleString()} VNĐ</Text>
+      <View style={styles.summaryContainer}>
+        <Text style={styles.totalLabel}>
+          Tổng Giá vốn:{" "}
+          <Text style={styles.totalValue_GiaVon}>
+            {tongGiaVon.toLocaleString()} VNĐ
+          </Text>
+        </Text>
+        <Text style={styles.totalLabel}>
+          Lãi ròng tạm tính:{" "}
+          <Text style={styles.totalValue_LaiRong}>
+            {(tongCong - tongGiaVon).toLocaleString()} VNĐ
+          </Text>
+        </Text>
+        <Text style={styles.totalLabel}>
+          Tổng thanh toán:{" "}
+          <Text style={styles.totalValue_TongTien}>
+            {tongCong.toLocaleString()} VNĐ
+          </Text>
+        </Text>
+      </View>
 
       {/* Nút lưu */}
       <TouchableOpacity style={styles.saveBtn} onPress={handleSaveInvoice}>
@@ -251,13 +301,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 12,
-    gap: 6
+    gap: 6,
   },
   addBtn: {
     backgroundColor: "#4a90e2",
     padding: 12,
     borderRadius: 8,
-    // margin-left được chuyển thành gap trong addItemContainer
   },
   item: {
     backgroundColor: "#f8f8f8",
@@ -266,9 +315,34 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: 'center'
+    alignItems: "center",
   },
-  total: { fontSize: 18, fontWeight: "bold", marginTop: 12, color: "green", textAlign: 'right', paddingRight: 5 },
+  // 🔥 STYLE MỚI CHO TỔNG HỢP
+  summaryContainer: {
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    marginTop: 10,
+  },
+  totalLabel: {
+    fontSize: 16,
+    textAlign: 'right',
+    paddingRight: 5,
+  },
+  totalValue_GiaVon: {
+    fontWeight: "bold",
+    color: "#8B4513", // Nâu
+  },
+  totalValue_LaiRong: {
+    fontWeight: "bold",
+    color: "darkgreen",
+    fontSize: 17,
+  },
+  totalValue_TongTien: {
+    fontWeight: "bold",
+    color: "#4a90e2", // Xanh dương
+    fontSize: 18,
+  },
   saveBtn: {
     backgroundColor: "#4a90e2",
     padding: 14,

@@ -1,20 +1,20 @@
 import { Ionicons } from "@expo/vector-icons";
 import { RouteProp } from "@react-navigation/native";
-import { doc, updateDoc, getDoc } from "firebase/firestore";
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import React, { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
     ActivityIndicator,
+    Alert,
     FlatList,
+    SafeAreaView,
     StyleSheet,
     Text,
     TextInput,
     TouchableOpacity,
     View,
-    SafeAreaView,
 } from "react-native";
 // Giả định đường dẫn này là chính xác
-import { db } from "../../firebaseConfig"; 
+import { db } from "../../firebaseConfig";
 import type { RootStackParamList } from "../../types";
 
 // Khai báo kiểu dữ liệu cho ca làm việc (Shift)

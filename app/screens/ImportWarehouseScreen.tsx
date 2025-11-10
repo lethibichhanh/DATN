@@ -88,11 +88,13 @@ export default function NhapKhoScreen({ navigation }: any) {
     }
 
     setLoading(true);
+    
+    // Khai báo biến cần truy cập ngoài khối if (Fix lỗi: Cannot find name 'newGiaVonLon')
+    let newGiaVonLon = selectedThuoc.giaVon || 0; 
+    const heSoQuyDoi = selectedThuoc.heSoQuyDoi || 1;
+    const soLuongNhoThem = soLuongLon * heSoQuyDoi;
+
     try {
-      // Tính toán tổng số lượng NHỎ sẽ được thêm vào tồn kho
-      const heSoQuyDoi = selectedThuoc.heSoQuyDoi || 1;
-      const soLuongNhoThem = soLuongLon * heSoQuyDoi;
-      
       // 1️⃣ Lưu phiếu nhập kho (Lưu theo Đơn vị LỚN để dễ truy vết)
       await addDoc(collection(db, "nhapkho"), {
         thuocId: thuocChonId,
@@ -112,21 +114,44 @@ export default function NhapKhoScreen({ navigation }: any) {
       if (thuocSnap.exists()) {
         const data = thuocSnap.data() as ThuocDetailType;
         
-        // Tổng tồn kho NHỎ mới
-        const soLuongTonKhoHienTaiNho = data.soluong || 0;
-        const soLuongTonKhoMoiNho = soLuongTonKhoHienTaiNho + soLuongNhoThem;
+        // --- ⚙️ BẮT ĐẦU NGHIỆP VỤ KẾ TOÁN: TÍNH GIÁ VỐN BÌNH QUÂN GIA QUYỀN (WAC) ---
         
-        // Cập nhật giá vốn (sử dụng giá nhập mới nhất)
-        const newGiaVonLon = giaLon; 
+        // 1. Lấy tồn kho hiện tại (đơn vị NHỎ)
+        const soLuongTonKhoHienTaiNho = data.soluong || 0;
+        
+        // 2. Chuyển đổi sang đơn vị LỚN để tính giá trị
+        const QtyLonHienTai = soLuongTonKhoHienTaiNho / heSoQuyDoi;
+        const GiaVonLonHienTai = data.giaVon || 0;
+        
+        // 3. Tính Tổng giá trị tồn cũ (Old Value)
+        const OldValue = QtyLonHienTai * GiaVonLonHienTai;
+        
+        // 4. Tính Tổng giá trị nhập mới (New Import Value)
+        const NewImportValue = soLuongLon * giaLon; // soLuongLon * giaNhapLon
+        
+        // 5. Tính Tổng số lượng LỚN mới (Total Quantity)
+        const NewQtyLon = QtyLonHienTai + soLuongLon;
+
+        if (NewQtyLon > 0) {
+            // 6. Tính Giá vốn Bình quân Gia quyền (WAC)
+            const NewTotalValue = OldValue + NewImportValue;
+            newGiaVonLon = NewTotalValue / NewQtyLon;
+        }
+
+        // --- KẾT THÚC NGHIỆP VỤ KẾ TOÁN ---
+
+        // Tổng tồn kho NHỎ mới
+        const soLuongTonKhoMoiNho = soLuongTonKhoHienTaiNho + soLuongNhoThem;
         
         await updateDoc(thuocRef, { 
             soluong: soLuongTonKhoMoiNho, // Cập nhật tổng SL theo Đơn vị NHỎ
-            giaVon: newGiaVonLon, // Cập nhật Giá vốn mới nhất
+            giaVon: newGiaVonLon, // Cập nhật Giá vốn Bình quân mới
             ngayCapNhat: new Date(),
         });
       }
 
-      Alert.alert("✅ Nhập kho thành công", `Đã nhập ${soLuongLon} ${selectedThuoc.donViTinh} (${soLuongNhoThem} ${selectedThuoc.donViNho}) vào kho.`);
+      // Thông báo sử dụng giá vốn mới đã tính toán
+      Alert.alert("✅ Nhập kho thành công", `Đã nhập ${soLuongLon} ${selectedThuoc.donViTinh} (${soLuongNhoThem} ${selectedThuoc.donViNho}) vào kho. Giá vốn bình quân mới là ${newGiaVonLon.toLocaleString('vi-VN')} VNĐ/${selectedThuoc.donViTinh}.`);
       setThuocChonId("");
       setSoLuongNhapLon("");
       setGiaNhapLon("");
@@ -165,7 +190,7 @@ export default function NhapKhoScreen({ navigation }: any) {
       {selectedThuoc && (
         <View style={styles.infoBox}>
             <Text style={styles.infoText}>
-                Tồn kho hiện tại: <Text style={{fontWeight: 'bold', color: '#007aff'}}>{selectedThuoc.soluong.toLocaleString('vi-VN')}</Text> {selectedThuoc.donViNho}
+                Tồn kho hiện tại: <Text style={{fontWeight: 'bold', color: '#007aff'}}>{(selectedThuoc.soluong / selectedThuoc.heSoQuyDoi).toLocaleString('vi-VN')}</Text> {selectedThuoc.donViTinh} (Tổng {selectedThuoc.soluong.toLocaleString('vi-VN')} {selectedThuoc.donViNho})
             </Text>
             <Text style={styles.infoText}>
                 Đơn vị nhập: <Text style={{fontWeight: 'bold'}}>{selectedThuoc.donViTinh}</Text> (1 {selectedThuoc.donViTinh} = {selectedThuoc.heSoQuyDoi} {selectedThuoc.donViNho})

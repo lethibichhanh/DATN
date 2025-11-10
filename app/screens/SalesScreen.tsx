@@ -43,6 +43,9 @@ interface Thuoc {
 // 🔥 State mới để theo dõi đơn vị bán được chọn cho mỗi thuốc
 type SellingUnit = 'large' | 'small';
 
+// 🔥 Type mới cho Phương thức thanh toán
+type PaymentMethod = 'cash' | 'transfer'; 
+
 export default function BanhangScreen() {
     const [thuocs, setThuocs] = useState<Thuoc[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -56,13 +59,16 @@ export default function BanhangScreen() {
     // 🔥 State mới: Lưu đơn vị bán hiện tại của từng thuốc (Mặc định là 'large')
     const [unitMode, setUnitMode] = useState<Record<string, SellingUnit>>({}); 
     
+    // 🔥 State mới: Lưu phương thức thanh toán (Mặc định là Tiền mặt)
+    const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash');
+
     // Hàm làm tròn tiền Việt Nam (ví dụ: làm tròn đến hàng nghìn, trăm, hoặc giữ nguyên)
     const roundVND = (price: number): number => {
         // Tùy chỉnh: Làm tròn đến hàng đơn vị (vì tiền tệ Việt Nam không có tiền lẻ nhỏ hơn 1đ)
         return Math.round(price); 
     };
 
-    // 1. FETCH DỮ LIỆU THUỐC
+    // 1. FETCH DỮ LIỆU THUỐC (Giữ nguyên)
     useEffect(() => {
         setIsLoading(true);
         const unsub = onSnapshot(
@@ -84,7 +90,7 @@ export default function BanhangScreen() {
         return () => unsub();
     }, []);
 
-    // 🔥 LOGIC CHUYỂN ĐỔI ĐƠN VỊ BÁN
+    // 🔥 LOGIC CHUYỂN ĐỔI ĐƠN VỊ BÁN (Giữ nguyên)
     const toggleUnitMode = (id: string) => {
         setUnitMode((prev) => {
             const currentMode = prev[id] || 'large';
@@ -104,7 +110,7 @@ export default function BanhangScreen() {
         });
     };
 
-    // --- 2. LOGIC XỬ LÝ SỐ LƯỢNG & KIỂM TRA TỒN KHO ---
+    // --- 2. LOGIC XỬ LÝ SỐ LƯỢNG & KIỂM TRA TỒN KHO --- (Giữ nguyên)
     const handleQuantityChange = (id: string, value: string) => {
         const num = parseInt(value.replace(/[^0-9]/g, ''));
         let soLuongBan = isNaN(num) || num < 0 ? 0 : num;
@@ -155,7 +161,7 @@ export default function BanhangScreen() {
         }
     };
 
-    // --- 3. CHUẨN BỊ DỮ LIỆU HÓA ĐƠN & TÍNH TỔNG TIỀN ---
+    // --- 3. CHUẨN BỊ DỮ LIỆU HÓA ĐƠN & TÍNH TỔNG TIỀN --- (Giữ nguyên)
     const { itemsToBuy, tongTien } = useMemo(() => {
         const calculatedItems = thuocs
             .filter((t) => selected[t.id] > 0) 
@@ -216,7 +222,7 @@ export default function BanhangScreen() {
         try {
             setIsProcessing(true); 
 
-            // 1. Lấy thông tin nhân viên
+            // 1. Lấy thông tin nhân viên (Giữ nguyên)
             const uid = auth.currentUser?.uid;
             let nhanVienName = "Unknown";
             if (uid) {
@@ -244,9 +250,11 @@ export default function BanhangScreen() {
                 khachHang: khachHang || "Khách lẻ",
                 sdtKhachHang: khachHang || "Khách lẻ", 
                 nhanVienUid: uid,
+                // 🔥 THÊM PHƯƠNG THỨC THANH TOÁN
+                phuongThucThanhToan: paymentMethod, 
             });
 
-            // 3. Cập nhật số lượng trong kho (trừ theo Đơn vị NHỎ/LẺ)
+            // 3. Cập nhật số lượng trong kho (trừ theo Đơn vị NHỎ/LẺ) (Giữ nguyên)
             for (const item of itemsToBuy) {
                 const thuocRef = doc(db, "thuocs", item.id);
                 const thuoc = thuocs.find((t) => t.id === item.id);
@@ -304,7 +312,8 @@ export default function BanhangScreen() {
             setSelected({});
             setKhachHang("");
             setSearchTerm("");
-            setUnitMode({}); // Reset đơn vị bán
+            setUnitMode({}); 
+            setPaymentMethod('cash'); // 🔥 Reset phương thức thanh toán
         } catch (error) {
             console.error("Lỗi tạo hóa đơn:", error);
             Alert.alert(
@@ -323,6 +332,7 @@ export default function BanhangScreen() {
 
     // --- GIAO DIỆN HIỂN THỊ ---
 
+    // renderItem (ĐÃ SỬA LỖI)
     const renderItem = ({ item }: { item: Thuoc }) => {
         const id = item.id;
         const currentMode = unitMode[id] || 'large'; // Đơn vị hiện tại
@@ -391,20 +401,20 @@ export default function BanhangScreen() {
                     {currentMode === 'large' && heSoQuyDoi > 1 && ` (Kho: ${currentStockLe} ${donViBanLe})`}
                 </Text>
 
-                {/* 🔥 NÚT CHUYỂN ĐỔI ĐƠN VỊ */}
+                {/* 🔥 NÚT CHUYỂN ĐỔI ĐƠN VỊ - ĐÃ SỬA LỖI TEXT STRING */}
                 {canSellSmall && (
                     <TouchableOpacity
                         style={styles.unitToggle}
                         onPress={() => toggleUnitMode(id)}
                         disabled={isOutOfStock}
                     >
+                        {/* SỬA LỖI: Thay thế chuỗi Markdown bằng <Text> lồng nhau để in đậm */}
                         <Text style={styles.unitToggleText}>
-                            Đang bán theo: **{displayUnitName}** (Chạm để chuyển)
+                            Đang bán theo: <Text style={{fontWeight: 'bold'}}>{displayUnitName}</Text> (Chạm để chuyển)
                         </Text>
                     </TouchableOpacity>
                 )}
                 
-
                 <TextInput
                     placeholder={
                         isOutOfStock
@@ -421,7 +431,7 @@ export default function BanhangScreen() {
         );
     };
 
-    // Modal Xác nhận Hóa đơn (Giữ nguyên)
+    // Modal Xác nhận Hóa đơn (ĐÃ SỬA LỖI)
     const InvoiceConfirmationModal = () => (
         <Modal
             animationType="fade"
@@ -435,6 +445,12 @@ export default function BanhangScreen() {
                     <Text style={styles.modalSubTitle}>
                         Khách hàng: {khachHang || "Khách lẻ"}
                     </Text>
+                    
+                    {/* SỬA LỖI: Thay thế chuỗi Markdown bằng <Text> lồng nhau để in đậm */}
+                    <Text style={styles.modalSubTitle}>
+                        Phương thức: <Text style={{fontWeight: 'bold'}}>{paymentMethod === 'cash' ? 'Tiền mặt' : 'Chuyển khoản'}</Text>
+                    </Text>
+
 
                     <ScrollView style={{ maxHeight: 200, marginBottom: 15 }}>
                         {itemsToBuy.map((item) => (
@@ -517,7 +533,7 @@ export default function BanhangScreen() {
                     <FlatList
                         data={filteredThuocs}
                         keyExtractor={(item) => String(item.id)}
-                        extraData={[selected, unitMode]} // Thêm unitMode vào extraData
+                        extraData={[selected, unitMode, paymentMethod]} // Thêm paymentMethod vào extraData
                         renderItem={renderItem}
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={{ paddingBottom: 100 }}
@@ -528,26 +544,51 @@ export default function BanhangScreen() {
                 )}
 
                 <View style={styles.summaryBar}>
-                    <Text style={styles.totalText}>
-                        Thành tiền:{" "}
-                        <Text style={{ fontWeight: "bold", color: "#d0021b" }}>
-                            {tongTien.toLocaleString('vi-VN')} VNĐ
+                    <View style={styles.paymentMethodContainer}>
+                        <TouchableOpacity
+                            style={[
+                                styles.paymentButton,
+                                paymentMethod === 'cash' && styles.paymentButtonActive
+                            ]}
+                            onPress={() => setPaymentMethod('cash')}
+                            disabled={isProcessing}
+                        >
+                            <Text style={styles.paymentButtonText}>Tiền mặt</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[
+                                styles.paymentButton,
+                                paymentMethod === 'transfer' && styles.paymentButtonActive
+                            ]}
+                            onPress={() => setPaymentMethod('transfer')}
+                            disabled={isProcessing}
+                        >
+                            <Text style={styles.paymentButtonText}>Chuyển khoản</Text>
+                        </TouchableOpacity>
+                    </View>
+                    
+                    <View style={styles.invoiceActionContainer}>
+                        <Text style={styles.totalText}>
+                            Thành tiền:{" "}
+                            <Text style={{ fontWeight: "bold", color: "#d0021b" }}>
+                                {tongTien.toLocaleString('vi-VN')} VNĐ
+                            </Text>
                         </Text>
-                    </Text>
-                    <TouchableOpacity
-                        onPress={handleConfirmInvoice}
-                        style={[
-                            styles.invoiceButton,
-                            itemsToBuy.length === 0 && styles.invoiceButtonDisabled,
-                        ]}
-                        disabled={itemsToBuy.length === 0 || isProcessing} 
-                    >
-                        <Text style={styles.invoiceButtonText}>
-                            {isProcessing
-                                ? "Đang xử lý..."
-                                : `Tạo Hóa Đơn (${itemsToBuy.length})`}
-                        </Text>
-                    </TouchableOpacity>
+                        <TouchableOpacity
+                            onPress={handleConfirmInvoice}
+                            style={[
+                                styles.invoiceButton,
+                                itemsToBuy.length === 0 && styles.invoiceButtonDisabled,
+                            ]}
+                            disabled={itemsToBuy.length === 0 || isProcessing} 
+                        >
+                            <Text style={styles.invoiceButtonText}>
+                                {isProcessing
+                                    ? "Đang xử lý..."
+                                    : `Tạo Hóa Đơn (${itemsToBuy.length})`}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
                 <InvoiceConfirmationModal />
@@ -635,7 +676,7 @@ const styles = StyleSheet.create({
         backgroundColor: "#eee",
     },
 
-    // Styles cho nút chuyển đổi
+    // Styles cho nút chuyển đổi Đơn vị
     unitToggle: {
         backgroundColor: '#e6f7ff',
         padding: 8,
@@ -667,10 +708,8 @@ const styles = StyleSheet.create({
     },
 
     summaryBar: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingVertical: 15,
+        flexDirection: "column", // Đổi thành column để chứa cả paymentMethodContainer
+        paddingVertical: 10,
         paddingHorizontal: 10,
         backgroundColor: "#fff",
         borderTopWidth: 1,
@@ -681,6 +720,43 @@ const styles = StyleSheet.create({
         right: 0,
         zIndex: 10,
     },
+    // 🔥 Container mới cho phương thức thanh toán
+    paymentMethodContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        marginBottom: 10,
+        paddingTop: 5,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+    },
+    paymentButton: {
+        flex: 1,
+        paddingVertical: 8,
+        paddingHorizontal: 10,
+        marginHorizontal: 5,
+        borderRadius: 5,
+        backgroundColor: '#f0f0f0',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#ddd'
+    },
+    paymentButtonActive: {
+        backgroundColor: '#d6e9f8', // Màu xanh nhạt khi được chọn
+        borderColor: '#4a90e2',
+    },
+    paymentButtonText: {
+        color: '#333',
+        fontWeight: 'bold',
+    },
+    
+    // Container cho tổng tiền và nút tạo hóa đơn
+    invoiceActionContainer: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingVertical: 5,
+    },
+
     totalText: {
         fontSize: 16,
         color: "#333",
@@ -700,7 +776,7 @@ const styles = StyleSheet.create({
         backgroundColor: "#ccc",
     },
 
-    // Styles cho Modal
+    // Styles cho Modal (Cập nhật tiêu đề)
     modalOverlay: {
         flex: 1,
         justifyContent: "center",

@@ -2,7 +2,7 @@ import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 // Bỏ comment các dòng dưới đây khi triển khai trong dự án thực tế
-// import { deleteDoc, doc } from "firebase/firestore"; 
+// import { deleteDoc, doc } from "firebase/firestore";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator, // Thêm useMemo để tối ưu hóa tính toán
@@ -38,48 +38,52 @@ type RootStackParamList = {
 };
 
 // =========================================================================
-// TYPE CHÍNH VÀ INTERFACE DỮ LIỆU
+// TYPE CHÍNH VÀ INTERFACE DỮ LIỆU (ĐÃ CẬP NHẬT GIÁ VỐN)
 // =========================================================================
 
 type ItemType = {
-  tenThuoc: string;
-  soLuong: number;
-  donGia: number;
+    tenThuoc: string;
+    soLuong: number;
+    donGia: number; // Giá bán
+    giaVon: number; // Thêm Giá vốn
 };
 
 export type ChiTietHoaDonProps = {
-  id: string;
-  ngayBan: { seconds: number; nanoseconds: number }; 
-  tongTien: number; 
-  nhanVien?: string;
-  khachHang?: string;
-  // Giữ lại giamGia? để hóa đơn có thể có giảm giá thủ công HOẶC khuyến mãi
-  giamGia?: number; 
-  thue?: number;
-  items: ItemType[];
+    id: string;
+    ngayBan: { seconds: number; nanoseconds: number };
+    tongTien: number;
+    nhanVien?: string;
+    khachHang?: string;
+    // Giảm giá & Thuế
+    giamGia?: number;
+    thue?: number;
+    // Thanh toán MỚI
+    paymentMethod: "Tiền mặt" | "Chuyển khoản" | string;
+    items: ItemType[];
+    // Thêm trường TÍNH TOÁN (cho mục đích demo thống kê)
+    tongGiaVon: number; 
 };
 
 type NavigationProp = NativeStackNavigationProp<
-  RootStackParamList,
-  "ChiTietHoaDon"
+    RootStackParamList,
+    "ChiTietHoaDon"
 >;
 type RouteProps = RouteProp<RootStackParamList, "ChiTietHoaDon">;
 
 
 // --- UTILS & FORMATTING ---
 const formatCurrency = (amount: number) => {
-  // Đảm bảo không hiển thị số âm cho giá trị tiền tệ
-  return Math.abs(amount).toLocaleString("vi-VN") + " VNĐ";
+    return Math.abs(amount).toLocaleString("vi-VN") + " VNĐ";
 };
 
 const formatDate = (timestamp: { seconds: number }) => {
-  return new Date(timestamp.seconds * 1000).toLocaleString("vi-VN", {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+    return new Date(timestamp.seconds * 1000).toLocaleString("vi-VN", {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
 };
 
 /**
@@ -90,7 +94,7 @@ const formatDate = (timestamp: { seconds: number }) => {
  * @returns {tongTienHang, giamGiaCuoi, tongCong}
  */
 const calculateDiscountAndTotal = (
-    items: ItemType[], 
+    items: ItemType[],
     existingDiscount: number,
     tax: number
 ) => {
@@ -106,15 +110,10 @@ const calculateDiscountAndTotal = (
 
     // 2. Kiểm tra và áp dụng khuyến mãi 10% nếu tổng tiền hàng >= 500.000 VNĐ
     if (tongTienHang >= NGUONG_KHUYEN_MAI) {
-        // Làm tròn giảm giá đến đơn vị VNĐ gần nhất
         giamGiaKhuyenMai = Math.round(tongTienHang * TY_LE_GIAM);
     }
-    
-    // 3. Giảm giá cuối cùng là tổng của Giảm giá thủ công (từ data) và Giảm giá khuyến mãi tự động
-    // NOTE: Trong thực tế, bạn có thể chọn: 
-    // a) Chỉ áp dụng giảm giá lớn nhất giữa thủ công và tự động, hoặc 
-    // b) Cộng dồn. Ở đây, tôi chọn chỉ áp dụng Giảm giá Khuyến mãi tự động nếu nó lớn hơn.
-    // Nếu bạn muốn giữ Giảm giá thủ công, hãy thay Math.max bằng dấu cộng.
+
+    // 3. Giảm giá cuối cùng
     const giamGiaCuoi = Math.max(existingDiscount, giamGiaKhuyenMai);
 
     // 4. Tính Tổng cộng
@@ -123,44 +122,63 @@ const calculateDiscountAndTotal = (
     return { tongTienHang, giamGiaCuoi, tongCong };
 };
 
+// =========================================================================
+// MÀN HÌNH CHI TIẾT
+// =========================================================================
 
 export default function ChiTietHoaDonScreen() {
-  const route = useRoute<RouteProps>();
-  const navigation = useNavigation<NavigationProp>();
-  const { data } = route.params;
-
-  const [isProcessing, setIsProcessing] = useState(false); 
-
-  // ✅ Sử dụng useMemo để chỉ tính toán lại khi dữ liệu đầu vào thay đổi
-  const { tongTienHang, giamGiaCuoi, tongCong } = useMemo(() => {
-    const giamGiaGoc = data.giamGia || 0;
-    const thue = data.thue || 0;
+    const route = useRoute<RouteProps>();
+    const navigation = useNavigation<NavigationProp>();
     
-    // Gọi hàm tính toán logic mới
-    return calculateDiscountAndTotal(data.items, giamGiaGoc, thue);
-  }, [data]);
-  
-  // Dùng giamGiaCuoi thay cho giamGia cũ
-  const giamGia = giamGiaCuoi; 
-  const thue = data.thue || 0; 
-  // Biến tongCong đã được tính toán ở trên
+    // Tạo data mẫu có giaVon nếu chưa có (chỉ cho mục đích demo)
+    const rawData = route.params.data;
+    // Cập nhật giả lập giá vốn cho tất cả items nếu thiếu (ví dụ: 15.000 VNĐ)
+    const data: ChiTietHoaDonProps = useMemo(() => ({
+        ...rawData,
+        items: rawData.items.map(item => ({
+            ...item,
+            // Thêm giá vốn giả lập nếu không có, để logic thống kê chạy được
+            giaVon: item.giaVon || 15000 
+        })),
+        // Tính tổng giá vốn cho hóa đơn này
+        tongGiaVon: rawData.items.reduce((sum, item) => sum + (item.giaVon || 15000) * item.soLuong, 0)
+    }), [rawData]);
+    
+    const [isProcessing, setIsProcessing] = useState(false);
 
-  // ✅ Xử lý xuất PDF (Đảm bảo PDF dùng giá trị đã tính toán mới)
-  const createHtmlContent = () => {
-    const tableRows = data.items
-      .map(
-        (item, index) =>
-          `<tr style="border-bottom: 1px solid #eee;">
+    // ✅ Sử dụng useMemo để chỉ tính toán lại khi dữ liệu đầu vào thay đổi
+    const { tongTienHang, giamGiaCuoi, tongCong } = useMemo(() => {
+        const giamGiaGoc = data.giamGia || 0;
+        const thue = data.thue || 0;
+
+        // Gọi hàm tính toán logic mới
+        return calculateDiscountAndTotal(data.items, giamGiaGoc, thue);
+    }, [data]);
+
+    const giamGia = giamGiaCuoi;
+    const thue = data.thue || 0;
+    const paymentMethod = data.paymentMethod || "Tiền mặt"; 
+    
+    // TÍNH LÃI LỖ NGAY TRONG CHI TIẾT HÓA ĐƠN
+    const laiLo = tongCong - data.tongGiaVon;
+
+
+    // ✅ Xử lý xuất PDF
+    const createHtmlContent = () => {
+        const tableRows = data.items
+            .map(
+                (item, index) =>
+                    `<tr style="border-bottom: 1px solid #eee;">
             <td style="padding: 8px; text-align: left;">${index + 1}</td>
             <td style="padding: 8px; text-align: left;">${item.tenThuoc}</td>
             <td style="padding: 8px; text-align: right;">${item.soLuong}</td>
             <td style="padding: 8px; text-align: right;">${formatCurrency(item.donGia)}</td>
             <td style="padding: 8px; text-align: right; font-weight: bold;">${formatCurrency(item.soLuong * item.donGia)}</td>
           </tr>`
-      )
-      .join("");
+            )
+            .join("");
 
-    return `
+        return `
       <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0">
@@ -188,6 +206,7 @@ export default function ChiTietHoaDonScreen() {
             <p><b>Ngày bán:</b> ${formatDate(data.ngayBan)}</p>
             <p><b>Nhân viên:</b> ${data.nhanVien || "N/A"}</p>
             <p><b>Khách hàng:</b> ${data.khachHang || "Khách lẻ"}</p>
+            <p><b>Thanh toán:</b> ${paymentMethod}</p>
         </div>
 
         <table>
@@ -211,163 +230,171 @@ export default function ChiTietHoaDonScreen() {
           <tr><td>Thuế (VAT):</td><td style="text-align: right;">+${formatCurrency(thue)}</td></tr>
           <tr><td colspan="2"><hr/></td></tr>
           <tr><td class="total">TỔNG CỘNG:</td><td class="total" style="text-align: right;">${formatCurrency(tongCong)}</td></tr>
+          <tr><td>Giá vốn:</td><td style="text-align: right; color: #6c757d;">${formatCurrency(data.tongGiaVon)}</td></tr>
+          <tr><td>LÃI RÒNG:</td><td style="text-align: right; font-weight: bold; color: #28a745;">${formatCurrency(laiLo)}</td></tr>
         </table>
       </body>
       </html>
     `;
-  };
+    };
 
-  const handleExportPDF = async () => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    try {
-      if (!Print.printToFileAsync || !Sharing.shareAsync) {
-        Alert.alert("Lỗi", "Chức năng này không được hỗ trợ trên thiết bị của bạn.");
-        return;
-      }
-      
-      const html = createHtmlContent();
-      const { uri } = await Print.printToFileAsync({ html });
-      await Sharing.shareAsync(uri, { dialogTitle: `Hoá đơn ${data.id}` });
-      
-    } catch (error) {
-      console.error("Lỗi xuất PDF:", error);
-      Alert.alert("Lỗi", "Không thể xuất hoặc chia sẻ file PDF.");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
+    const handleExportPDF = async () => {
+        if (isProcessing) return;
+        setIsProcessing(true);
+        try {
+            if (!Print.printToFileAsync || !Sharing.shareAsync) {
+                Alert.alert("Lỗi", "Chức năng này không được hỗ trợ trên thiết bị của bạn.");
+                return;
+            }
 
-  // ✅ Xóa hóa đơn
-  const handleDelete = () => {
-    if (isProcessing) return;
-    Alert.alert("Xác nhận", "Bạn có chắc muốn XÓA VĨNH VIỄN hóa đơn này?", [
-      { text: "Hủy", style: "cancel" },
-      {
-        text: "Xóa",
-        style: "destructive",
-        onPress: async () => {
-          setIsProcessing(true);
-          try {
-            await deleteDoc(doc(db, "hoadons", data.id)); 
-            Alert.alert("Thành công", "Hóa đơn đã được xóa khỏi hệ thống.");
-            navigation.goBack();
-          } catch (error) {
-            console.error("Lỗi xóa hóa đơn:", error);
-            Alert.alert("Lỗi", "Không thể xóa hóa đơn. Vui lòng thử lại.");
-          } finally {
+            const html = createHtmlContent();
+            const { uri } = await Print.printToFileAsync({ html });
+            await Sharing.shareAsync(uri, { dialogTitle: `Hoá đơn ${data.id}` });
+
+        } catch (error) {
+            console.error("Lỗi xuất PDF:", error);
+            Alert.alert("Lỗi", "Không thể xuất hoặc chia sẻ file PDF.");
+        } finally {
             setIsProcessing(false);
-          }
-        },
-      },
-    ]);
-  };
+        }
+    };
 
-  // ✅ Chỉnh sửa hóa đơn
-  const handleEdit = () => {
-    if (isProcessing) return;
-    // Khi sửa, chúng ta truyền dữ liệu gốc (bao gồm giảm giá thủ công cũ nếu có)
-    navigation.navigate("ThemHoaDon", { data }); 
-  };
+    // ✅ Xóa hóa đơn
+    const handleDelete = () => {
+        if (isProcessing) return;
+        Alert.alert("Xác nhận", "Bạn có chắc muốn XÓA VĨNH VIỄN hóa đơn này?", [
+            { text: "Hủy", style: "cancel" },
+            {
+                text: "Xóa",
+                style: "destructive",
+                onPress: async () => {
+                    setIsProcessing(true);
+                    try {
+                        await deleteDoc(doc(db, "hoadons", data.id));
+                        Alert.alert("Thành công", "Hóa đơn đã được xóa khỏi hệ thống.");
+                        navigation.goBack();
+                    } catch (error) {
+                        console.error("Lỗi xóa hóa đơn:", error);
+                        Alert.alert("Lỗi", "Không thể xóa hóa đơn. Vui lòng thử lại.");
+                    } finally {
+                        setIsProcessing(false);
+                    }
+                },
+            },
+        ]);
+    };
 
-  const renderItem = ({ item }: { item: ItemType }) => (
-    <View style={styles.itemCard}>
-      <View style={styles.itemHeader}>
-        <Text style={styles.itemName}>💊 {item.tenThuoc}</Text>
-        <Text style={styles.itemTotal}>{formatCurrency(item.donGia * item.soLuong)}</Text>
-      </View>
-      <View style={styles.itemDetail}>
-        <Text style={styles.itemDetailText}>SL: {item.soLuong}</Text>
-        <Text style={styles.itemDetailText}>Đơn giá: {formatCurrency(item.donGia)}</Text>
-      </View>
-    </View>
-  );
+    // ✅ Chỉnh sửa hóa đơn
+    const handleEdit = () => {
+        if (isProcessing) return;
+        navigation.navigate("ThemHoaDon", { data });
+    };
 
-  return (
-    <View style={styles.container}>
-      {isProcessing && (
-        <View style={styles.loadingOverlay}>
-            <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={{ marginTop: 10, color: COLORS.primary }}>Đang xử lý...</Text>
+    const renderItem = ({ item }: { item: ItemType }) => (
+        <View style={styles.itemCard}>
+            <View style={styles.itemHeader}>
+                <Text style={styles.itemName}>💊 {item.tenThuoc}</Text>
+                <Text style={styles.itemTotal}>{formatCurrency(item.donGia * item.soLuong)}</Text>
+            </View>
+            <View style={styles.itemDetail}>
+                <Text style={styles.itemDetailText}>SL: {item.soLuong}</Text>
+                <Text style={styles.itemDetailText}>Đơn giá: {formatCurrency(item.donGia)}</Text>
+            </View>
         </View>
-      )}
-      
-      <Text style={styles.screenTitle}>Chi tiết hóa đơn</Text>
-      
-      {/* Thông tin chung */}
-      <View style={styles.generalInfoCard}>
-        <InfoRow icon="barcode-outline" label="Mã HĐ" value={data.id} />
-        <InfoRow icon="calendar-outline" label="Ngày bán" value={formatDate(data.ngayBan)} />
-        <InfoRow icon="person-outline" label="Nhân viên" value={data.nhanVien || "N/A"} />
-        <InfoRow icon="people-outline" label="Khách hàng" value={data.khachHang || "Khách lẻ"} />
-      </View>
+    );
 
-      {/* Danh sách thuốc */}
-      <Text style={styles.sectionTitle}>Sản phẩm đã bán ({data.items.length})</Text>
-      <FlatList
-        data={data.items}
-        keyExtractor={(_, index) => index.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={{ paddingBottom: 10 }}
-        style={styles.listContainer}
-        showsVerticalScrollIndicator={false}
-      />
+    return (
+        <View style={styles.container}>
+            {isProcessing && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size="large" color={COLORS.primary} />
+                    <Text style={{ marginTop: 10, color: COLORS.primary }}>Đang xử lý...</Text>
+                </View>
+            )}
 
-      {/* Tổng hợp */}
-      <View style={styles.footer}>
-        <SummaryRow label="Tổng tiền hàng" value={tongTienHang} />
-        {/* Highlight nếu là giảm giá tự động lớn hơn 0 */}
-        <SummaryRow 
-            label={giamGia > (data.giamGia || 0) ? "Giảm giá (KM 10%)" : "Giảm giá"} 
-            value={giamGia} 
-            isNegative={true} 
-        />
-        <SummaryRow label="Thuế (VAT)" value={thue} />
-        
-        <View style={styles.divider} />
+            <Text style={styles.screenTitle}>Chi tiết hóa đơn</Text>
 
-        <SummaryRow label="TỔNG CỘNG" value={tongCong} isTotal={true} />
-      </View>
+            {/* Thông tin chung */}
+            <View style={styles.generalInfoCard}>
+                <InfoRow icon="barcode-outline" label="Mã HĐ" value={data.id} />
+                <InfoRow icon="calendar-outline" label="Ngày bán" value={formatDate(data.ngayBan)} />
+                <InfoRow icon="person-outline" label="Nhân viên" value={data.nhanVien || "N/A"} />
+                <InfoRow icon="people-outline" label="Khách hàng" value={data.khachHang || "Khách lẻ"} />
+                <InfoRow icon="card-outline" label="Thanh toán" value={paymentMethod} />
+            </View>
 
-      {/* Các nút hành động */}
-      <View style={styles.actions}>
-        <ActionButton 
-            icon="document-text-outline" 
-            label="Xuất PDF" 
-            color={COLORS.blue} 
-            onPress={handleExportPDF} 
-            disabled={isProcessing}
-        />
-        <ActionButton 
-            icon="create-outline" 
-            label="Sửa" 
-            color={COLORS.orange} 
-            onPress={handleEdit} 
-            disabled={isProcessing}
-        />
-        <ActionButton 
-            icon="trash-outline" 
-            label="Xóa" 
-            color={COLORS.danger} 
-            onPress={handleDelete} 
-            disabled={isProcessing}
-        />
-      </View>
-    </View>
-  );
+            {/* Danh sách thuốc */}
+            <Text style={styles.sectionTitle}>Sản phẩm đã bán ({data.items.length})</Text>
+            <FlatList
+                data={data.items}
+                keyExtractor={(_, index) => index.toString()}
+                renderItem={renderItem}
+                contentContainerStyle={{ paddingBottom: 10 }}
+                style={styles.listContainer}
+                showsVerticalScrollIndicator={false}
+            />
+
+            {/* Tổng hợp */}
+            <View style={styles.footer}>
+                <SummaryRow label="Tổng tiền hàng" value={tongTienHang} />
+                {/* Highlight nếu là giảm giá tự động lớn hơn 0 */}
+                <SummaryRow
+                    label={giamGia > (data.giamGia || 0) ? "Giảm giá (KM 10%)" : "Giảm giá"}
+                    value={giamGia}
+                    isNegative={true}
+                />
+                <SummaryRow label="Thuế (VAT)" value={thue} />
+
+                <View style={styles.divider} />
+
+                <SummaryRow label="TỔNG CỘNG" value={tongCong} isTotal={true} />
+                
+                {/* HIỂN THỊ GIÁ VỐN VÀ LÃI LỖ MỚI */}
+                <View style={styles.divider} />
+                <SummaryRow label="Giá Vốn (Cost)" value={data.tongGiaVon} isCost={true} />
+                <SummaryRow label="LÃI RÒNG" value={laiLo} isProfit={true} />
+                {/* KẾT THÚC CẬP NHẬT MỚI */}
+            </View>
+
+            {/* Các nút hành động */}
+            <View style={styles.actions}>
+                <ActionButton
+                    icon="document-text-outline"
+                    label="Xuất PDF"
+                    color={COLORS.blue}
+                    onPress={handleExportPDF}
+                    disabled={isProcessing}
+                />
+                <ActionButton
+                    icon="create-outline"
+                    label="Sửa"
+                    color={COLORS.orange}
+                    onPress={handleEdit}
+                    disabled={isProcessing}
+                />
+                <ActionButton
+                    icon="trash-outline"
+                    label="Xóa"
+                    color={COLORS.danger}
+                    onPress={handleDelete}
+                    disabled={isProcessing}
+                />
+            </View>
+        </View>
+    );
 }
 
-// --- SUB-COMPONENTS VÀ STYLESHEET (KHÔNG ĐỔI) ---
+// --- SUB-COMPONENTS VÀ STYLESHEET (ĐÃ CẬP NHẬT SummaryRow) ---
 
 const COLORS = {
-    primary: "#007bff",      // Xanh dương chủ đạo
-    secondary: "#6c757d",    // Xám
-    success: "#28a745",      // Xanh lá (Tổng cộng)
-    danger: "#dc3545",       // Đỏ (Xóa)
-    blue: "#17a2b8",         // Xanh da trời (PDF)
-    orange: "#ffc107",       // Cam (Sửa)
-    background: "#f8f9fa",   // Nền nhẹ
-    card: "#fff",            // Nền thẻ
+    primary: "#007bff",       
+    secondary: "#6c757d",     
+    success: "#28a745",       
+    danger: "#dc3545",        
+    blue: "#17a2b8",          
+    orange: "#ffc107",        
+    background: "#f8f9fa",    
+    card: "#fff",             
 };
 
 const InfoRow = ({ icon, label, value }: { icon: any, label: string, value: string }) => (
@@ -378,13 +405,16 @@ const InfoRow = ({ icon, label, value }: { icon: any, label: string, value: stri
     </View>
 );
 
-const SummaryRow = ({ label, value, isNegative = false, isTotal = false }: { label: string, value: number, isNegative?: boolean, isTotal?: boolean }) => (
+const SummaryRow = ({ label, value, isNegative = false, isTotal = false, isProfit = false, isCost = false }: 
+    { label: string, value: number, isNegative?: boolean, isTotal?: boolean, isProfit?: boolean, isCost?: boolean }) => (
     <View style={styles.summaryRow}>
-        <Text style={[styles.summaryLabel, isTotal && styles.totalLabel]}>{label}</Text>
-        <Text 
+        <Text style={[styles.summaryLabel, isTotal && styles.totalLabel, isProfit && styles.profitLabel]}>{label}</Text>
+        <Text
             style={[
-                styles.summaryValue, 
-                isTotal ? styles.totalValue : (isNegative && value > 0 ? { color: COLORS.danger } : {})
+                styles.summaryValue,
+                isTotal ? styles.totalValue : (isNegative && value > 0 ? { color: COLORS.danger } : {}),
+                isProfit && styles.profitValue,
+                isCost && styles.costValue
             ]}
         >
             {isNegative && value > 0 ? `- ${formatCurrency(value)}` : formatCurrency(value)}
@@ -393,9 +423,9 @@ const SummaryRow = ({ label, value, isNegative = false, isTotal = false }: { lab
 );
 
 const ActionButton = ({ icon, label, color, onPress, disabled }: { icon: any, label: string, color: string, onPress: () => void, disabled: boolean }) => (
-    <TouchableOpacity 
-        style={[styles.actionBtn, { backgroundColor: color, opacity: disabled ? 0.6 : 1 }]} 
-        onPress={onPress} 
+    <TouchableOpacity
+        style={[styles.actionBtn, { backgroundColor: color, opacity: disabled ? 0.6 : 1 }]}
+        onPress={onPress}
         disabled={disabled}
     >
         <Ionicons name={icon} size={20} color={COLORS.card} />
@@ -404,123 +434,127 @@ const ActionButton = ({ icon, label, color, onPress, disabled }: { icon: any, la
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: COLORS.background },
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 10,
-  },
-  screenTitle: { 
-    fontSize: 24, 
-    fontWeight: "bold", 
-    color: COLORS.primary,
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: COLORS.secondary,
-    marginTop: 15,
-    marginBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingBottom: 5,
-  },
-  
-  generalInfoCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 15,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3 },
-      android: { elevation: 3 },
-    }),
-  },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  infoIcon: { width: 25 },
-  infoLabel: { fontSize: 16, color: COLORS.secondary, fontWeight: '500', minWidth: 80 },
-  infoValue: { fontSize: 16, color: COLORS.secondary, flex: 1, fontWeight: '700' },
-  
-  listContainer: {
-      flexGrow: 1,
-  },
-  itemCard: {
-    backgroundColor: COLORS.card,
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    borderLeftWidth: 5,
-    borderLeftColor: COLORS.primary,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
-      android: { elevation: 2 },
-    }),
-  },
-  itemHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 5,
-  },
-  itemName: { fontWeight: "bold", fontSize: 16, color: COLORS.primary, flex: 1 },
-  itemTotal: { fontWeight: "bold", fontSize: 16, color: COLORS.success },
-  itemDetail: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  itemDetailText: { fontSize: 14, color: COLORS.secondary },
+    container: { flex: 1, padding: 20, backgroundColor: COLORS.background },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(255, 255, 255, 0.8)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    screenTitle: {
+        fontSize: 24,
+        fontWeight: "bold",
+        color: COLORS.primary,
+        marginBottom: 20,
+        textAlign: 'center',
+    },
+    sectionTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: COLORS.secondary,
+        marginTop: 15,
+        marginBottom: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#eee',
+        paddingBottom: 5,
+    },
 
-  footer: { 
-    marginTop: 10, 
-    paddingTop: 10, 
-    marginBottom: 15,
-    backgroundColor: COLORS.card,
-    borderRadius: 10,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 5,
-  },
-  summaryLabel: { fontSize: 16, color: COLORS.secondary },
-  summaryValue: { fontSize: 16, fontWeight: '600', color: COLORS.secondary },
-  totalLabel: { fontSize: 18, fontWeight: 'bold', color: COLORS.primary },
-  totalValue: { fontSize: 18, fontWeight: 'bold', color: COLORS.success },
-  divider: {
-    height: 1,
-    backgroundColor: '#ddd',
-    marginVertical: 8,
-  },
+    generalInfoCard: {
+        backgroundColor: COLORS.card,
+        borderRadius: 10,
+        padding: 15,
+        marginBottom: 15,
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3 },
+            android: { elevation: 3 },
+        }),
+    },
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 5,
+    },
+    infoIcon: { width: 25 },
+    infoLabel: { fontSize: 16, color: COLORS.secondary, fontWeight: '500', minWidth: 80 },
+    infoValue: { fontSize: 16, color: COLORS.secondary, flex: 1, fontWeight: '700' },
 
-  actions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 10,
-    paddingHorizontal: 5,
-  },
-  actionBtn: { 
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12, 
-    borderRadius: 10,
-    flex: 1,
-    marginHorizontal: 5,
-    justifyContent: 'center',
-  },
-  actionBtnText: { 
-    color: COLORS.card, 
-    fontWeight: "bold", 
-    marginLeft: 8,
-    fontSize: 15,
-  },
+    listContainer: {
+        flexGrow: 1,
+    },
+    itemCard: {
+        backgroundColor: COLORS.card,
+        padding: 15,
+        borderRadius: 10,
+        marginBottom: 10,
+        borderLeftWidth: 5,
+        borderLeftColor: COLORS.primary,
+        ...Platform.select({
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2 },
+            android: { elevation: 2 },
+        }),
+    },
+    itemHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 5,
+    },
+    itemName: { fontWeight: "bold", fontSize: 16, color: COLORS.primary, flex: 1 },
+    itemTotal: { fontWeight: "bold", fontSize: 16, color: COLORS.success },
+    itemDetail: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    itemDetailText: { fontSize: 14, color: COLORS.secondary },
+
+    footer: {
+        marginTop: 10,
+        paddingTop: 10,
+        marginBottom: 15,
+        backgroundColor: COLORS.card,
+        borderRadius: 10,
+        paddingHorizontal: 15,
+        paddingVertical: 10,
+    },
+    summaryRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 5,
+    },
+    summaryLabel: { fontSize: 16, color: COLORS.secondary },
+    summaryValue: { fontSize: 16, fontWeight: '600', color: COLORS.secondary },
+    totalLabel: { fontSize: 18, fontWeight: 'bold', color: COLORS.primary },
+    totalValue: { fontSize: 18, fontWeight: 'bold', color: COLORS.success },
+    // STYLES MỚI CHO GIÁ VỐN & LÃI RÒNG
+    costValue: { fontSize: 15, fontWeight: '500', color: COLORS.secondary },
+    profitLabel: { fontSize: 18, fontWeight: 'bold', color: COLORS.success },
+    profitValue: { fontSize: 18, fontWeight: 'bold', color: COLORS.success },
+    divider: {
+        height: 1,
+        backgroundColor: '#ddd',
+        marginVertical: 8,
+    },
+
+    actions: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        marginTop: 10,
+        paddingHorizontal: 5,
+    },
+    actionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 12,
+        borderRadius: 10,
+        flex: 1,
+        marginHorizontal: 5,
+        justifyContent: 'center',
+    },
+    actionBtnText: {
+        color: COLORS.card,
+        fontWeight: "bold",
+        marginLeft: 8,
+        fontSize: 15,
+    },
 });

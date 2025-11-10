@@ -21,13 +21,17 @@ import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as Print from "expo-print";
 
+// ✅ Cập nhật kiểu dữ liệu Thuoc để tính toán Giá vốn Bình quân Gia quyền (WAC)
 type Thuoc = {
   id: string;
   ten: string;
-  soluong: number;
+  soluong: number; // Tổng tồn kho theo Đơn vị NHỎ
   hanSuDung?: string;
-  giaBan?: number;
-  giaNhap?: number;
+  giaBan?: number; // Giá bán (Đơn vị LỚN)
+  giaVon?: number; // ✅ Giá vốn bình quân (Đơn vị LỚN)
+  donViTinh?: string; // Đơn vị LỚN
+  donViNho?: string; // Đơn vị NHỎ
+  heSoQuyDoi?: number; // Hệ số quy đổi (1 ĐV LỚN = N ĐV NHỎ)
   [key: string]: any;
 };
 
@@ -76,7 +80,13 @@ export default function QuanLyTonKhoScreen() {
       collection(db, "thuocs"),
       (snapshot) => {
         const data = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as Thuoc[];
-        const normalized = data.map((t) => ({ ...t, soluong: Number(t.soluong || 0) }));
+        // Đảm bảo soluong là số và có giá trị mặc định
+        const normalized = data.map((t) => ({ 
+            ...t, 
+            soluong: Number(t.soluong || 0),
+            heSoQuyDoi: Number(t.heSoQuyDoi || 1), // Đảm bảo hệ số quy đổi tồn tại
+            giaVon: Number(t.giaVon || 0), // Đảm bảo giaVon tồn tại
+        }));
         setThuocs(normalized);
         setLoading(false);
       },
@@ -90,12 +100,21 @@ export default function QuanLyTonKhoScreen() {
 
   // 📊 Thống kê nhanh
   const totalTypes = thuocs.length;
-  const totalQty = thuocs.reduce((s, t) => s + (t.soluong || 0), 0);
-  const totalValue = thuocs.reduce(
-    (s, t) => s + (t.giaNhap || 0) * (t.soluong || 0),
-    0
-  ); // 💰 Giá trị hàng tồn kho
-  const sapHetCount = thuocs.filter((t) => (t.soluong || 0) <= 10).length;
+  const totalQty = thuocs.reduce((s, t) => s + (t.soluong || 0), 0); // Tổng tồn kho theo Đơn vị NHỎ
+
+  // ✅ Cập nhật: Tính Giá trị tồn kho (totalValue) theo Giá vốn Bình quân (giaVon)
+  const totalValue = useMemo(() => {
+    return thuocs.reduce((sum, t) => {
+        const qtyNho = t.soluong || 0;
+        const heSo = t.heSoQuyDoi || 1;
+        const giaVonLon = t.giaVon || 0;
+        // Giá trị tồn kho = Tổng (Số lượng Đơn vị LỚN * Giá vốn Đơn vị LỚN)
+        const qtyLon = qtyNho / heSo;
+        return sum + qtyLon * giaVonLon;
+    }, 0);
+  }, [thuocs]);
+
+  const sapHetCount = thuocs.filter((t) => (t.soluong || 0) <= 10).length; // Tồn kho thấp (<=10 đơn vị nhỏ)
   const hetHanCount = thuocs.filter((t) => isHetHan(t.hanSuDung)).length;
   const sapHetHanCount = thuocs.filter((t) => isSapHetHan(t.hanSuDung)).length;
 
@@ -126,14 +145,20 @@ export default function QuanLyTonKhoScreen() {
         Alert.alert("Không có dữ liệu để xuất");
         return;
       }
-      const header = ["id", "ten", "soluong", "hanSuDung", "giaNhap", "giaBan"];
+      // ✅ Cập nhật header và data để sử dụng giaVon thay vì giaNhap
+      const header = ["id", "ten", "soluong_nho", "donViNho", "hanSuDung", "giaVon_lon", "giaBan_lon", "heSoQuyDoi"];
       const rows = thuocs.map((t) =>
-        header
-          .map((h) => {
-            let v = (t as any)[h];
-            if (v === undefined || v === null) v = "";
-            return `"${String(v).replace(/"/g, '""')}"`;
-          })
+        [
+            t.id ?? "",
+            t.ten ?? "",
+            t.soluong ?? "", // Số lượng đơn vị nhỏ
+            t.donViNho ?? "",
+            t.hanSuDung ?? "",
+            t.giaVon ?? "", // Giá vốn đơn vị LỚN
+            t.giaBan ?? "", // Giá bán đơn vị LỚN
+            t.heSoQuyDoi ?? "",
+        ]
+          .map((v) => `"${String(v).replace(/"/g, '""')}"`)
           .join(",")
       );
       const csv = [header.join(","), ...rows].join("\n");
@@ -168,20 +193,24 @@ export default function QuanLyTonKhoScreen() {
       </head><body>
       <h1>📦 Báo cáo tồn kho</h1>
       <p>Ngày xuất: ${new Date().toLocaleString()}</p>
-      <p>Tổng loại thuốc: ${totalTypes} — Tổng tồn: ${totalQty}</p>
+      <p>Tổng loại thuốc: ${totalTypes} — Tổng tồn (ĐV nhỏ): ${totalQty.toLocaleString('vi-VN')}</p>
       <p>💰 Giá trị tồn kho: ${totalValue.toLocaleString("vi-VN")} ₫</p>
       <table>
-        <thead><tr><th>#</th><th>Tên</th><th>Số lượng</th><th>Hạn sử dụng</th><th>Giá nhập</th><th>Giá bán</th></tr></thead>
+        <thead><tr><th>#</th><th>Tên</th><th>Số lượng tồn (ĐV lớn)</th><th>Đơn vị lớn</th><th>Giá vốn (ĐV lớn)</th><th>Giá bán (ĐV lớn)</th><th>Hạn sử dụng</th></tr></thead>
         <tbody>
       `;
       thuocs.forEach((t, i) => {
+        // Tính số lượng đơn vị LỚN để hiển thị
+        const qtyLon = (t.soluong || 0) / (t.heSoQuyDoi || 1); 
+        
         html += `<tr>
           <td>${i + 1}</td>
           <td>${t.ten ?? ""}</td>
-          <td>${t.soluong ?? ""}</td>
+          <td>${qtyLon.toLocaleString('vi-VN') ?? ""}</td>
+          <td>${t.donViTinh ?? ""}</td>
+          <td>${(t.giaVon ?? 0).toLocaleString('vi-VN')}</td>
+          <td>${(t.giaBan ?? 0).toLocaleString('vi-VN')}</td>
           <td>${t.hanSuDung ?? ""}</td>
-          <td>${t.giaNhap ?? ""}</td>
-          <td>${t.giaBan ?? ""}</td>
         </tr>`;
       });
       html += `</tbody></table></body></html>`;
@@ -194,10 +223,11 @@ export default function QuanLyTonKhoScreen() {
   };
 
   const renderItem = ({ item }: { item: Thuoc }) => {
-    const qty = Number(item.soluong || 0);
+    const qty = Number(item.soluong || 0); // Đơn vị NHỎ
+    const qtyLon = qty / (item.heSoQuyDoi || 1); // Đơn vị LỚN
     const expired = isHetHan(item.hanSuDung);
     const nearExpire = isSapHetHan(item.hanSuDung);
-    const lowStock = qty <= 10;
+    const lowStock = qtyLon <= 1; // Cảnh báo tồn kho thấp theo Đơn vị LỚN (ví dụ: <= 1 hộp)
 
     let bg = styles.itemSafe;
     if (expired) bg = styles.itemExpired;
@@ -211,12 +241,13 @@ export default function QuanLyTonKhoScreen() {
       >
         <View style={{ flex: 1 }}>
           <Text style={styles.itemTitle}>{item.ten}</Text>
-          <Text style={styles.itemSub}>Số lượng: {qty}</Text>
+          <Text style={styles.itemSub}>Tồn: {qtyLon.toLocaleString('vi-VN')} {item.donViTinh} ({qty.toLocaleString('vi-VN')} {item.donViNho})</Text>
           <Text style={styles.itemSub}>HSD: {item.hanSuDung ?? "N/A"}</Text>
         </View>
         <View style={{ alignItems: "flex-end" }}>
+          {/* Hiển thị Giá bán */}
           <Text style={{ fontWeight: "700" }}>
-            {item.giaBan ? `${item.giaBan.toLocaleString("vi-VN")} ₫` : ""}
+            {item.giaBan ? `${item.giaBan.toLocaleString("vi-VN")} ₫ / ${item.donViTinh}` : ""}
           </Text>
           <TouchableOpacity
             style={styles.smallBtn}
@@ -262,14 +293,14 @@ export default function QuanLyTonKhoScreen() {
             <Text style={styles.statValue}>{totalTypes}</Text>
           </View>
           <View style={[styles.statCard, { backgroundColor: "#FFF7EA" }]}>
-            <Text>Tổng tồn</Text>
-            <Text style={styles.statValue}>{totalQty}</Text>
+            <Text>Tổng tồn (ĐV nhỏ)</Text>
+            <Text style={styles.statValue}>{totalQty.toLocaleString('vi-VN')}</Text>
           </View>
         </View>
 
         <View style={styles.cardRow}>
           <View style={[styles.statCard, { backgroundColor: "#E9F7EF" }]}>
-            <Text>💰 Giá trị tồn kho</Text>
+            <Text>💰 Giá trị tồn kho (Giá vốn)</Text>
             <Text style={styles.statValue}>
               {totalValue.toLocaleString("vi-VN")} ₫
             </Text>
@@ -281,7 +312,7 @@ export default function QuanLyTonKhoScreen() {
         </View>
 
         {/* Biểu đồ tồn kho */}
-        <Text style={styles.sectionTitle}>📊 Biểu đồ tồn kho (Top theo số lượng)</Text>
+        <Text style={styles.sectionTitle}>📊 Biểu đồ tồn kho (Top theo số lượng ĐV nhỏ)</Text>
         {topByQty.length ? (
           <BarChart
             data={{
