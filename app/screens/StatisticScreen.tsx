@@ -518,21 +518,41 @@ export default function ThongKeScreen() {
                 📌 Tổng quan ({fromDate.toLocaleDateString('vi-VN')} - {toDate.toLocaleDateString('vi-VN')})
             </Text>
             <View style={styles.summaryCard}>
-                <Text style={styles.dataRow}>- **Doanh thu:** <Text style={{ color: '#007bff', fontWeight: 'bold' }}>{thongKeTongQuan.doanhThu.toLocaleString()} VNĐ</Text></Text>
-                <Text style={styles.dataRow}>- **Chi phí (Giá vốn):** <Text style={{ color: '#d0021b', fontWeight: 'bold' }}>{thongKeTongQuan.chiPhi.toLocaleString()} VNĐ</Text></Text>
+                {/* Đã sửa lỗi Markdown **Doanh thu** */}
+                <Text style={styles.dataRow}>
+                    - <Text style={{ fontWeight: 'bold' }}>Doanh thu:</Text> 
+                    <Text style={{ color: '#007bff', fontWeight: 'bold' }}>{thongKeTongQuan.doanhThu.toLocaleString()} VNĐ</Text>
+                </Text>
+                {/* Đã sửa lỗi Markdown **Chi phí (Giá vốn)** */}
+                <Text style={styles.dataRow}>
+                    - <Text style={{ fontWeight: 'bold' }}>Chi phí (Giá vốn):</Text> 
+                    <Text style={{ color: '#d0021b', fontWeight: 'bold' }}>{thongKeTongQuan.chiPhi.toLocaleString()} VNĐ</Text>
+                </Text>
                 <Text style={{ ...styles.dataRow, fontSize: 16 }}>
-                    - **Lãi/Lỗ:** <Text style={{ color: thongKeTongQuan.loiNhuan >= 0 ? '#28a745' : '#d0021b', fontWeight: 'bold' }}>
+                    - <Text style={{ fontWeight: 'bold' }}>Lãi/Lỗ:</Text> 
+                    <Text style={{ color: thongKeTongQuan.loiNhuan >= 0 ? '#28a745' : '#d0021b', fontWeight: 'bold' }}>
                         {thongKeTongQuan.loiNhuan.toLocaleString()} VNĐ
                     </Text>
                 </Text>
                 <View style={styles.separator} />
-                <Text style={styles.dataRow}>**Phương thức thanh toán:**</Text>
+                {/* Dòng này ổn, nhưng tôi bọc lại để đảm bảo tính nhất quán */}
+                <Text style={styles.dataRow}>
+                    <Text style={{ fontWeight: 'bold' }}>Phương thức thanh toán:</Text>
+                </Text>
                 <Text style={styles.dataRowSmall}>- Tiền mặt: {thanhToanData.TienMat.toLocaleString()} VNĐ</Text>
                 <Text style={styles.dataRowSmall}>- Chuyển khoản: {thanhToanData.ChuyenKhoan.toLocaleString()} VNĐ</Text>
                 {thanhToanData.Khac > 0 && <Text style={styles.dataRowSmall}>- Khác: {thanhToanData.Khac.toLocaleString()} VNĐ</Text>}
                 <View style={styles.separator} />
-                <Text style={styles.dataRow}>- Số hóa đơn: **{thongKeTongQuan.soHoaDon}**</Text>
-                <Text style={styles.dataRow}>- Số khách hàng: **{thongKeTongQuan.soKhachHang}**</Text>
+                {/* Đã sửa lỗi Markdown **{thongKeTongQuan.soHoaDon}** */}
+                <Text style={styles.dataRow}>
+                    - Số hóa đơn: 
+                    <Text style={{ fontWeight: 'bold' }}>{thongKeTongQuan.soHoaDon}</Text>
+                </Text>
+                {/* Đã sửa lỗi Markdown **{thongKeTongQuan.soKhachHang}** */}
+                <Text style={styles.dataRow}>
+                    - Số khách hàng: 
+                    <Text style={{ fontWeight: 'bold' }}>{thongKeTongQuan.soKhachHang}</Text>
+                </Text>
             </View>
 
             {/* --- BIỂU ĐỒ DOANH THU 7 NGÀY (Dữ liệu gốc) --- */}
@@ -580,9 +600,10 @@ export default function ThongKeScreen() {
             </View>
             {Object.entries(nvData).length > 0 && Object.values(nvData).some(val => val > 0) && (
                 <View style={styles.detailList}>
+                    {/* Đã sửa lỗi Markdown **{nv}** */}
                     {Object.entries(nvData).sort(([, a], [, b]) => b - a).map(([nv, value]) => (
                         <Text key={nv} style={styles.listItem}>
-                            • **{nv}**: {value.toLocaleString()} VNĐ
+                            • <Text style={{ fontWeight: 'bold' }}>{nv}</Text>: {value.toLocaleString()} VNĐ
                         </Text>
                     ))}
                 </View>
@@ -603,7 +624,7 @@ export default function ThongKeScreen() {
                         const laiLo = val.tongTienBan - val.tongGiaVon;
                         return (
                             <Text key={t} style={styles.listItem}>
-                                • **{t}**: {val.soLuong.toLocaleString()} sp (DT: {val.tongTienBan.toLocaleString()} VNĐ - Lãi: <Text style={{ color: laiLo >= 0 ? '#28a745' : '#d0021b', fontWeight: 'bold' }}>{laiLo.toLocaleString()} VNĐ</Text>)
+                                • <Text style={{ fontWeight: 'bold' }}>{t}</Text>: {val.soLuong.toLocaleString()} sp (DT: {val.tongTienBan.toLocaleString()} VNĐ - Lãi: <Text style={{ color: laiLo >= 0 ? '#28a745' : '#d0021b', fontWeight: 'bold' }}>{laiLo.toLocaleString()} VNĐ</Text>)
                             </Text>
                         );
                     })
@@ -627,6 +648,7 @@ const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: "#fff", padding: 16 },
     title: { fontSize: 22, fontWeight: "bold", marginBottom: 15, textAlign: 'center', color: '#333' },
     section: { fontSize: 16, fontWeight: "bold", marginTop: 25, marginBottom: 10, color: '#4a90e2' },
+    // Cập nhật styles.dataRow nếu cần, nhưng logic sửa lỗi đã thay thế việc dùng Markdown
     dataRow: { fontSize: 14, marginBottom: 4, lineHeight: 22 },
     dataRowSmall: { fontSize: 13, marginBottom: 2, marginLeft: 10, lineHeight: 20 },
     separator: { height: 1, backgroundColor: '#cce0ff', marginVertical: 8 },
