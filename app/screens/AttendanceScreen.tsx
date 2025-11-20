@@ -10,7 +10,6 @@ import {
     SafeAreaView 
 } from "react-native";
 import { collection, addDoc, query, where, onSnapshot, updateDoc, doc } from "firebase/firestore";
-// Đảm bảo firebaseConfig.ts có export 'db'
 import { db } from "../../firebaseConfig"; 
 
 // Khai báo kiểu dữ liệu cho dữ liệu chấm công
@@ -35,8 +34,7 @@ export default function ChamCongScreen({ route }: any) {
     const [isLoading, setIsLoading] = useState(true);
     const [isChecking, setIsChecking] = useState(false);
     
-    // Lấy ngày hiện tại ở định dạng YYYY-MM-DD
-    const today = new Date().toISOString().slice(0, 10); 
+    const today = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
 
     // Fetch dữ liệu chấm công của nhân viên
     useEffect(() => {
@@ -46,7 +44,6 @@ export default function ChamCongScreen({ route }: any) {
         const unsub = onSnapshot(q, (snapshot) => {
             const data = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as AttendanceRecord[];
             
-            // Sắp xếp client-side theo ngày giảm dần
             data.sort((a, b) => b.date.localeCompare(a.date));
 
             setAttendance(data);
@@ -59,9 +56,9 @@ export default function ChamCongScreen({ route }: any) {
         return () => unsub();
     }, [user.uid]);
 
-    // Lấy bản ghi chấm công của ngày hôm nay (YYYY-MM-DD)
     const todayRecord = attendance.find(a => a.date === today);
 
+    // Xử lý Check-in
     const handleCheckIn = async () => {
         if (isChecking) return;
         
@@ -87,6 +84,7 @@ export default function ChamCongScreen({ route }: any) {
         }
     };
 
+    // Xử lý Check-out
     const handleCheckOut = async () => {
         if (isChecking) return;
         
@@ -115,7 +113,6 @@ export default function ChamCongScreen({ route }: any) {
         }
     };
 
-    // Tính toán trạng thái disabled
     const isCheckInDisabled = !!todayRecord?.checkIn || isChecking;
     const isCheckOutDisabled = !todayRecord?.checkIn || !!todayRecord?.checkOut || isChecking;
 
@@ -165,9 +162,16 @@ export default function ChamCongScreen({ route }: any) {
         );
     }
 
+    // Render từng mục trong FlatList
     const renderItem = ({ item }: { item: AttendanceRecord }) => {
         const timeOptions: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
         
+        const displayDate = new Date(item.date).toLocaleDateString('vi-VN', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric'
+        });
+
         const checkInTime = item.checkIn 
             ? new Date(item.checkIn).toLocaleTimeString('vi-VN', timeOptions) 
             : "--:--";
@@ -184,14 +188,15 @@ export default function ChamCongScreen({ route }: any) {
 
         return (
             <View style={styles.item}>
-                <Text style={styles.itemDate}>{item.date}</Text>
+                <Text style={styles.itemDate}>{displayDate}</Text>
 
                 <View style={styles.itemRow}>
-                    <Text style={{ color: '#555' }}>⏰ Check-in: </Text>
+                    {/* KHÔNG CÓ KHOẢNG TRẮNG GIỮA CÁC TEXT CON TRONG CÙNG 1 VIEW */}
+                    <Text style={{ color: '#555' }}>⏰ Check-in:</Text>
                     <Text style={{ fontWeight: 'bold', color: '#4CAF50' }}>{checkInTime}</Text>
                 </View>
                 <View style={styles.itemRow}>
-                    <Text style={{ color: '#555' }}>🚪 Check-out: </Text>
+                    <Text style={{ color: '#555' }}>🚪 Check-out:</Text>
                     <Text style={{ fontWeight: 'bold', color: '#E53935' }}>{checkOutTime}</Text>
                 </View>
                 {totalHours && (

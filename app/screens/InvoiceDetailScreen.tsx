@@ -152,9 +152,9 @@ export default function ChiTietHoaDonScreen() {
         // 💡 MOCK FIX (Tạm thời): Nếu dữ liệu paymentMethod bị thiếu hoặc trống, và tổng cộng là 40.000 VNĐ,
         // GIẢ LẬP gán nó là "Chuyển khoản" để khớp với dữ liệu thống kê bạn đã cung cấp.
         if ((!finalPaymentMethod || finalPaymentMethod.trim() === "") && tongCong === 40000) {
-             finalPaymentMethod = "Chuyển khoản";
+            finalPaymentMethod = "Chuyển khoản";
         } else if (!finalPaymentMethod || finalPaymentMethod.trim() === "") {
-             finalPaymentMethod = "Tiền mặt"; // Mặc định nếu vẫn thiếu
+            finalPaymentMethod = "Tiền mặt"; // Mặc định nếu vẫn thiếu
         }
 
         return ({
@@ -183,7 +183,7 @@ export default function ChiTietHoaDonScreen() {
     // **SỬ DỤNG TRỰC TIẾP GIÁ TRỊ TỪ data ĐÃ XỬ LÝ**
     const paymentMethod = data.paymentMethod || "Tiền mặt"; 
     
-    // ✅ Xử lý xuất PDF
+    // ✅ Xử lý xuất PDF (ĐÃ CẬP NHẬT TÊN NHÀ THUỐC VÀ CẢM ƠN)
     const createHtmlContent = () => {
         const tableRows = data.items
             .map(
@@ -197,6 +197,25 @@ export default function ChiTietHoaDonScreen() {
           </tr>`
             )
             .join("");
+
+        // 💡 Thêm thông tin Nhà thuốc Phúc Hạnh
+        const nhaThuocInfo = `
+            <div style="text-align: center; margin-bottom: 20px;">
+                <h2 style="color: #007bff; margin: 5px 0;">NHÀ THUỐC PHÚC HẠNH</h2>
+                <p style="font-size: 14px; margin: 2px 0;">Địa chỉ: 123 Đường Sức Khỏe, Phường Y Học, TP. Dĩ An</p>
+                <p style="font-size: 14px; margin: 2px 0;">Điện thoại: 0123 456 789 | Email: phuchanh@pharmacy.com</p>
+            </div>
+        `;
+        
+        // 💡 Thêm lời cảm ơn
+        const thankYouNote = `
+            <div style="text-align: center; margin-top: 30px; padding: 10px; border-top: 1px solid #ddd;">
+                <p style="font-style: italic; font-size: 15px; color: #555;">
+                    Xin chân thành cảm ơn Quý Khách! Hẹn gặp lại Quý Khách.
+                </p>
+                <p style="margin-top: 15px; font-size: 14px; font-weight: bold;">Nhân viên bán hàng: ${data.nhanVien || "N/A"}</p>
+            </div>
+        `;
 
         return `
       <html>
@@ -217,14 +236,13 @@ export default function ChiTietHoaDonScreen() {
       </head>
       <body>
         <div class="header">
-            <h1>HOÁ ĐƠN BÁN THUỐC (INVOICE)</h1>
-            <p style="font-size: 12px; margin-top: 5px;">Cảm ơn quý khách đã tin tưởng dịch vụ!</p>
+            ${nhaThuocInfo}
+            <h1 style="color: #333; border-bottom: 1px solid #ddd;">HOÁ ĐƠN BÁN HÀNG</h1>
         </div>
         
         <div class="info-group">
             <p><b>Mã HĐ:</b> ${data.id}</p>
             <p><b>Ngày bán:</b> ${formatDate(data.ngayBan)}</p>
-            <p><b>Nhân viên:</b> ${data.nhanVien || "N/A"}</p>
             <p><b>Khách hàng:</b> ${data.khachHang || "Khách lẻ"}</p>
             <p><b>Thanh toán:</b> ${paymentMethod}</p> 
             </div>
@@ -251,6 +269,9 @@ export default function ChiTietHoaDonScreen() {
           <tr><td colspan="2"><hr/></td></tr>
           <tr><td class="total">TỔNG CỘNG:</td><td class="total" style="text-align: right;">${formatCurrency(tongCong)}</td></tr>
         </table>
+        
+        ${thankYouNote}
+
       </body>
       </html>
     `;
@@ -400,14 +421,14 @@ export default function ChiTietHoaDonScreen() {
 // --- SUB-COMPONENTS VÀ STYLESHEET (ĐÃ CẬP NHẬT SummaryRow) ---
 
 const COLORS = {
-    primary: "#007bff",      
-    secondary: "#6c757d",     
-    success: "#28a745",       
-    danger: "#dc3545",        
-    blue: "#17a2b8",          
-    orange: "#ffc107",        
-    background: "#f8f9fa",    
-    card: "#fff",             
+    primary: "#007bff", 
+    secondary: "#6c757d", 
+    success: "#28a745", 
+    danger: "#dc3545", 
+    blue: "#17a2b8", 
+    orange: "#ffc107", 
+    background: "#f8f9fa", 
+    card: "#fff", 
 };
 
 const InfoRow = ({ icon, label, value }: { icon: any, label: string, value: string }) => (

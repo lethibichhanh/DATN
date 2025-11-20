@@ -1,52 +1,72 @@
-import React, { useEffect, useState } from "react";
-import { View, Text, FlatList, StyleSheet, ActivityIndicator } from "react-native";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { 
+    View, Text, FlatList, StyleSheet, ActivityIndicator, 
+    TouchableOpacity, Alert, ScrollView 
+} from "react-native";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
+// Giả định đường dẫn và cấu hình Firebase là chính xác
 import { db } from "../../firebaseConfig"; 
+import * as Print from "expo-print"; 
+import * as Sharing from "expo-sharing"; 
 
 // ==========================================================
-// ⭐ HẰNG SỐ & HÀM TÍNH TOÁN LƯƠNG VIỆT NAM (SIMPLIFIED)
+// ⭐ HẰNG SỐ & CẤU HÌNH LƯƠNG VIỆT NAM (Quy định 2024)
 // ==========================================================
 
 // Tỷ lệ đóng Bảo hiểm bắt buộc (Người lao động)
 const SI_RATE_EMPLOYEE = 0.105; // 10.5% (BHXH 8%, BHYT 1.5%, BHTN 1%)
+// Mức trần đóng BHXH (Quy định hiện hành, giả định 20 lần Lương tối thiểu vùng I)
+const SI_MAX_BASE = 36000000; // 36,000,000 VNĐ
 // Giảm trừ gia cảnh (Bản thân)
-const PERSONAL_DEDUCTION = 11000000; // 11 triệu VNĐ (năm 2024)
+const PERSONAL_DEDUCTION = 11000000; // 11,000,000 VNĐ
+// Giảm trừ Người phụ thuộc (Gia đình)
+const DEPENDENT_DEDUCTION = 4400000; // 4,400,000 VNĐ/người
+// Giờ làm việc chuẩn trong tháng (26 ngày * 8 giờ/ngày)
+const STANDARD_WORKING_HOURS = 208; 
 
-// Biểu thuế lũy tiến từng phần (Simplified)
+// Biểu thuế lũy tiến từng phần (Theo quy định hiện hành)
 const TAX_BANDS = [
-    { limit: 5000000, rate: 0.05 },     // 5%
-    { limit: 10000000, rate: 0.10 },    // 10%
-    { limit: 18000000, rate: 0.15 },    // 15%
-    { limit: 32000000, rate: 0.20 },    // 20%
-    { limit: 52000000, rate: 0.25 },    // 25%
-    { limit: 80000000, rate: 0.30 },    // 30%
-    { limit: Infinity, rate: 0.35 },    // 35%
+    { limit: 5000000, rate: 0.05 },     // Bậc 1
+    { limit: 10000000, rate: 0.10 },    // Bậc 2
+    { limit: 18000000, rate: 0.15 },    // Bậc 3
+    { limit: 32000000, rate: 0.20 },    // Bậc 4
+    { limit: 52000000, rate: 0.25 },    // Bậc 5
+    { limit: 80000000, rate: 0.30 },    // Bậc 6
+    { limit: Infinity, rate: 0.35 },    // Bậc 7
 ];
 
-// Hàm tính Thuế Thu nhập Cá nhân (TNCN)
+/**
+ * Hàm tính Thuế Thu nhập Cá nhân (TNCN) theo biểu lũy tiến
+ * @param assessableIncome Thu nhập tính thuế (đã trừ giảm trừ)
+ */
 const calculatePIT = (assessableIncome: number): number => {
     if (assessableIncome <= 0) return 0;
 
     let pit = 0;
     let remainingIncome = assessableIncome;
+    let accumulatedLimit = 0;
 
     for (const band of TAX_BANDS) {
         if (remainingIncome <= 0) break;
 
-        const lowerLimit = TAX_BANDS[TAX_BANDS.indexOf(band) - 1]?.limit || 0;
-        const taxableBase = band.limit === Infinity 
+        const previousLimit = accumulatedLimit;
+        const currentBandRange = band.limit === Infinity 
             ? remainingIncome 
-            : Math.min(remainingIncome, band.limit - lowerLimit);
+            : band.limit - previousLimit;
+        
+        const taxableBase = Math.min(remainingIncome, currentBandRange);
 
         pit += taxableBase * band.rate;
         remainingIncome -= taxableBase;
+        accumulatedLimit = band.limit; // Chỉ dùng để tính toán limit kế tiếp
     }
 
+    // Trả về số tiền thuế đã làm tròn
     return Math.round(pit);
 };
 
 // ==========================================================
-// ⭐ KHAI BÁO KIỂU DỮ LIỆU
+// ⭐ KHAI BÁO KIỂU DỮ LIỆU & HÀM ĐỊNH DẠNG
 // ==========================================================
 interface AttendanceRecord {
     date: string; // YYYY-MM-DD
@@ -57,8 +77,9 @@ interface AttendanceRecord {
 interface UserInfo {
     uid: string;
     name: string;
-    salary: number;      // Lương cố định (Dùng để tính Bảo hiểm và rate giờ)
-    allowance: number;   // Phụ cấp
+    salary: number;    // Lương cố định (Dùng để tính Bảo hiểm và rate giờ)
+    allowance: number; // Phụ cấp
+    numDependents: number; // Số người phụ thuộc
     [key: string]: any;
 }
 
@@ -72,36 +93,125 @@ const formatCurrency = (amount: number) => {
     }).format(safeAmount);
 };
 
+// Hàm lấy Giờ/Phút của ISO string
+const getLocalTime = (isoString: string | null): string => {
+    if (!isoString) return "--";
+    try {
+        // Tạo đối tượng Date, sau đó format theo múi giờ địa phương
+        const date = new Date(isoString);
+        return date.toLocaleTimeString('vi-VN', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: false // Hiện thị 24h
+        });
+    } catch (e) {
+        return "--";
+    }
+}
+
 
 export default function BangLuongScreen({ route }: any) {
     const { user } = route.params as { user: UserInfo };
     
-    if (!user || !user.uid) {
-        return (
-            <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>Lỗi: Không tìm thấy thông tin nhân viên.</Text>
-                <Text style={styles.errorSubText}>Vui lòng quay lại màn hình trước và chọn nhân viên.</Text>
-            </View>
-        );
-    }
-
+    // Đảm bảo dữ liệu số không bị null/undefined
+    const monthlyContractSalary = parseFloat(user.salary as any) || 0; 
+    const monthlyAllowance = parseFloat(user.allowance as any) || 0; 
+    const numDependents = user.numDependents || 0; 
+    
+    // State quản lý dữ liệu và kết quả
     const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
-    const [monthlyGrossSalary, setMonthlyGrossSalary] = useState<number>(0);
-    const [totalWorkingHours, setTotalWorkingHours] = useState<number>(0);
-    const [compulsoryInsurance, setCompulsoryInsurance] = useState<number>(0); 
-    const [pitAmount, setPitAmount] = useState<number>(0); 
-    const [netSalary, setNetSalary] = useState<number>(0); 
+    const [payrollResult, setPayrollResult] = useState({
+        monthlyGrossSalary: 0,
+        totalWorkingHours: 0,
+        compulsoryInsurance: 0,
+        incomeSubjectToTax: 0,
+        taxableIncome: 0,
+        pitAmount: 0,
+        netSalary: 0,
+        totalDependentDeduction: 0,
+    });
     const [isLoading, setIsLoading] = useState(true);
 
-    const currentDate = new Date();
-    const currentMonth = currentDate.getMonth() + 1;
-    const currentYear = currentDate.getFullYear();
-    const workingHoursPerDay = 8; 
-    const workingDaysPerMonth = 26; 
-    const standardWorkingHours = workingDaysPerMonth * workingHoursPerDay; 
+    // Tính toán tháng/năm hiện tại chỉ một lần
+    const today = useMemo(() => new Date(), []);
+    const currentMonth = today.getMonth() + 1;
+    const currentYear = today.getFullYear();
+
+    // Hàm tính toán logic bảng lương
+    const calculatePayroll = useCallback((monthlyData: AttendanceRecord[]) => {
+        let totalHours = 0;
+        
+        // Tính tổng số giờ làm việc thực tế
+        monthlyData.forEach(a => {
+            if(a.checkIn && a.checkOut){
+                const checkInTime = new Date(a.checkIn).getTime();
+                const checkOutTime = new Date(a.checkOut).getTime();
+                let hours = (checkOutTime - checkInTime) / (1000 * 60 * 60); 
+                // Cải thiện: Đảm bảo giờ làm không bị âm (Check out > Check in)
+                totalHours += Math.max(0, hours); 
+            }
+        });
+
+        // 1. Tính Lương Cơ Bản (theo giờ làm thực tế)
+        const salaryPerHour = monthlyContractSalary > 0 && STANDARD_WORKING_HOURS > 0 
+            ? monthlyContractSalary / STANDARD_WORKING_HOURS 
+            : 0;
+        // Lương cơ bản thực tế dựa trên số giờ làm
+        const baseGrossSalary = Math.round(totalHours * salaryPerHour);
+        
+        // 2. Tính Tổng Lương Gross (Base thực tế + Allowance)
+        const totalGrossSalary = baseGrossSalary + monthlyAllowance;
+
+        // 3. Tính Bảo hiểm bắt buộc (CI)
+        // Cơ sở đóng BHXH là Lương HĐ, tối đa là SI_MAX_BASE
+        const insuranceBase = Math.min(monthlyContractSalary, SI_MAX_BASE); 
+        const calculatedCI = Math.round(insuranceBase * SI_RATE_EMPLOYEE);
+        
+        let actualCI = 0;
+        // Chỉ đóng BHXH nếu Lương HĐ > 0 (người lao động có hợp đồng)
+        // Lưu ý: Logic này cho phép Lương Net âm nếu Gross < CI, là đúng theo luật.
+        if (monthlyContractSalary > 0) {
+            actualCI = calculatedCI; 
+        }
+
+        // 4. Tính Giảm trừ Người phụ thuộc
+        const totalDependentDeduction = numDependents * DEPENDENT_DEDUCTION;
+
+        // 5. Tính Thu nhập chịu thuế (Income Subject to Tax)
+        const calculatedIncomeSubjectToTax = totalGrossSalary - actualCI; 
+        
+        // Tổng Giảm trừ
+        const totalDeduction = PERSONAL_DEDUCTION + totalDependentDeduction; 
+        
+        // 6. Tính Thu nhập tính thuế (Taxable Income - Assessable Income)
+        // Phải đảm bảo TNCT > Tổng Giảm trừ
+        const finalTaxableIncome = Math.max(0, calculatedIncomeSubjectToTax - totalDeduction);
+        
+        // 7. Tính Thuế TNCN (PIT)
+        const calculatedPIT = calculatePIT(finalTaxableIncome);
+
+        // 8. Tính Lương Net
+        const finalNetSalary = totalGrossSalary - actualCI - calculatedPIT; 
+        
+        // Cập nhật state kết quả
+        setPayrollResult({
+            monthlyGrossSalary: totalGrossSalary,
+            totalWorkingHours: totalHours,
+            compulsoryInsurance: actualCI,
+            incomeSubjectToTax: calculatedIncomeSubjectToTax,
+            taxableIncome: finalTaxableIncome,
+            pitAmount: calculatedPIT,
+            netSalary: finalNetSalary,
+            totalDependentDeduction,
+        });
+        
+    }, [monthlyContractSalary, monthlyAllowance, numDependents]);
+
 
     useEffect(() => {
+        // ... (Giữ nguyên logic fetch data từ Firebase)
         setIsLoading(true);
+        // Lấy dữ liệu chấm công cho UID của nhân viên
         const q = query(collection(db, "attendance"), where("uid", "==", user.uid));
         
         const unsub = onSnapshot(q, (snapshot) => {
@@ -116,56 +226,9 @@ export default function BangLuongScreen({ route }: any) {
                 return recordMonth === currentMonth && recordYear === currentYear;
             });
             setAttendance(monthlyData);
-
-            let totalHours = 0;
-            const monthlyContractSalary = parseFloat(user.salary as any) || 0; 
-            const monthlyAllowance = parseFloat(user.allowance as any) || 0; 
-
-            // Tính tổng số giờ làm việc thực tế
-            monthlyData.forEach(a => {
-                if(a.checkIn && a.checkOut){
-                    const checkInTime = new Date(a.checkIn).getTime();
-                    const checkOutTime = new Date(a.checkOut).getTime();
-                    let hours = (checkOutTime - checkInTime) / (1000 * 60 * 60); 
-                    totalHours += hours;
-                }
-            });
-            setTotalWorkingHours(totalHours);
-
-            // 1. Tính Lương Cơ Bản (theo giờ làm thực tế)
-            const salaryPerHour = monthlyContractSalary > 0 && standardWorkingHours > 0 
-                ? monthlyContractSalary / standardWorkingHours 
-                : 0;
-            const baseGrossSalary = Math.round(totalHours * salaryPerHour);
             
-            // 2. Tính Tổng Lương Gross (Base + Allowance)
-            const totalGrossSalary = baseGrossSalary + monthlyAllowance;
-            setMonthlyGrossSalary(totalGrossSalary);
-
-            // 3. Tính Bảo hiểm bắt buộc (CI)
-            const calculatedCI_Base = Math.round(monthlyContractSalary * SI_RATE_EMPLOYEE);
-
-            let actualCI = 0;
-            if (totalGrossSalary >= calculatedCI_Base) {
-                actualCI = calculatedCI_Base;
-            } else if (totalGrossSalary > 0) {
-                actualCI = 0; 
-            }
-            setCompulsoryInsurance(actualCI); 
-
-            // 4. Tính Thu nhập tính thuế (Assessable Income)
-            const taxableIncome = totalGrossSalary - actualCI; 
-            const assessableIncome = taxableIncome > PERSONAL_DEDUCTION 
-                ? taxableIncome - PERSONAL_DEDUCTION 
-                : 0;
-
-            // 5. Tính Thuế TNCN (PIT)
-            const calculatedPIT = calculatePIT(assessableIncome);
-            setPitAmount(calculatedPIT);
-
-            // 6. Tính Lương Net
-            const finalNetSalary = totalGrossSalary - actualCI - calculatedPIT; 
-            setNetSalary(finalNetSalary);
+            // Gọi hàm tính toán
+            calculatePayroll(monthlyData);
             
             setIsLoading(false);
         }, (error) => {
@@ -174,33 +237,156 @@ export default function BangLuongScreen({ route }: any) {
         });
         
         return () => unsub();
-    }, [user.uid, user.salary, user.allowance, currentMonth, currentYear]);
+    }, [user.uid, currentMonth, currentYear, calculatePayroll]); 
 
+    // ==========================================================
+    // ⭐ HÀM XUẤT PDF (Sử dụng dữ liệu từ payrollResult)
+    // ==========================================================
+    const createPDF = async () => {
+        const {
+            monthlyGrossSalary, totalWorkingHours, compulsoryInsurance,
+            incomeSubjectToTax, taxableIncome, pitAmount, netSalary,
+            totalDependentDeduction
+        } = payrollResult;
+        
+        const dependentInfo = numDependents > 0 
+            ? `<tr><td>Giảm trừ Người phụ thuộc (${numDependents} người)</td><td class="text-right deduction">(${formatCurrency(totalDependentDeduction)})</td></tr>`
+            : '';
 
-    const renderItem = ({ item }: { item: AttendanceRecord }) => {
-        const formattedDate = new Date(item.date + 'T00:00:00').toLocaleDateString('vi-VN'); 
-        
-        const checkInTime = item.checkIn ? new Date(item.checkIn).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : "--";
-        const checkOutTime = item.checkOut ? new Date(item.checkOut).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : "--";
-        
-        let hoursWorked = 0;
-        if (item.checkIn && item.checkOut) {
-            const diffInMilliseconds = new Date(item.checkOut).getTime() - new Date(item.checkIn).getTime();
-            hoursWorked = (diffInMilliseconds / (1000 * 60 * 60));
+        const htmlContent = `
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <style>
+                    body { font-family: 'Arial', sans-serif; padding: 20px; color: #333; }
+                    .header { text-align: center; margin-bottom: 20px; }
+                    .header h1 { color: #007bff; }
+                    .summary-box { border: 1px solid #007bff; padding: 15px; border-radius: 8px; margin-bottom: 20px; background-color: #f9f9ff; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+                    th { background-color: #eef; color: #333; }
+                    .total-row td { font-weight: bold; background-color: #ffe0e0; color: #d0021b; font-size: 1.1em; }
+                    .deduction { color: #d0021b; }
+                    .gross { color: #007bff; font-weight: bold; }
+                    .text-right { text-align: right; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>BẢNG LƯƠNG THÁNG ${currentMonth}/${currentYear}</h1>
+                    <p><strong>Nhân viên:</strong> ${user.name}</p>
+                    <p><strong>Mã nhân viên:</strong> ${user.uid}</p>
+                </div>
+
+                <div class="summary-box">
+                    <h2>I. TÓM TẮT THU NHẬP</h2>
+                    <table>
+                        <tr>
+                            <td>Lương hợp đồng (Đóng BH)</td>
+                            <td class="text-right">${formatCurrency(monthlyContractSalary)}</td>
+                        </tr>
+                        <tr>
+                            <td>Phụ cấp cố định</td>
+                            <td class="text-right">${formatCurrency(monthlyAllowance)}</td>
+                        </tr>
+                        <tr>
+                            <td>Tổng giờ làm thực tế</td>
+                            <td class="text-right">${totalWorkingHours.toFixed(2)} giờ (${STANDARD_WORKING_HOURS} giờ chuẩn)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>TỔNG LƯƠNG GROSS (Ước tính)</strong></td>
+                            <td class="text-right gross">${formatCurrency(monthlyGrossSalary)}</td>
+                        </tr>
+                    </table>
+
+                    <h2>II. CÁC KHOẢN KHẤU TRỪ & THỰC NHẬN</h2>
+                    <table>
+                        <tr><th>Khoản mục</th><th>Giá trị</th></tr>
+                        <tr>
+                            <td>Bảo hiểm bắt buộc (CI - 10.5% trên ${formatCurrency(Math.min(monthlyContractSalary, SI_MAX_BASE))})</td>
+                            <td class="text-right deduction">(${formatCurrency(compulsoryInsurance)})</td>
+                        </tr>
+                        <tr>
+                            <td>**Thu nhập chịu thuế (Gross - BH)**</td>
+                            <td class="text-right gross">${formatCurrency(incomeSubjectToTax)}</td>
+                        </tr>
+                        <tr>
+                            <td>Giảm trừ Bản thân</td>
+                            <td class="text-right deduction">(${formatCurrency(PERSONAL_DEDUCTION)})</td>
+                        </tr>
+                        ${dependentInfo}
+                        <tr>
+                            <td>**Thu nhập tính thuế (TNTT)**</td>
+                            <td class="text-right">${formatCurrency(taxableIncome)}</td>
+                        </tr>
+                        <tr>
+                            <td>Thuế Thu nhập Cá nhân (PIT)</td>
+                            <td class="text-right deduction">(${formatCurrency(pitAmount)})</td>
+                        </tr>
+                        <tr class="total-row">
+                            <td>TỔNG LƯƠNG NET THỰC NHẬN</td>
+                            <td class="text-right">${formatCurrency(netSalary)}</td>
+                        </tr>
+                    </table>
+                </div>
+                
+                <h2>III. CHI TIẾT CÔNG LÀM VIỆC</h2>
+                <table>
+                    <tr><th>Ngày</th><th>Check-in</th><th>Check-out</th><th>Giờ làm</th></tr>
+                    ${attendance.sort((a,b)=>a.date.localeCompare(b.date)).map(item => {
+                        const formattedDate = new Date(item.date + 'T00:00:00').toLocaleDateString('vi-VN');
+                        const checkInTime = getLocalTime(item.checkIn);
+                        const checkOutTime = getLocalTime(item.checkOut);
+                        let hoursWorked = 0;
+                        if (item.checkIn && item.checkOut) {
+                            const diffInMilliseconds = new Date(item.checkOut).getTime() - new Date(item.checkIn).getTime();
+                            hoursWorked = (diffInMilliseconds / (1000 * 60 * 60));
+                        }
+                        return `<tr><td>${formattedDate}</td><td>${checkInTime}</td><td>${checkOutTime}</td><td class="text-right">${Math.max(0, hoursWorked).toFixed(2)} giờ</td></tr>`;
+                    }).join('')}
+                </table>
+
+                <p style="text-align: center; font-size: 0.8em; margin-top: 30px;">Bảng lương được tính toán tự động dựa trên luật thuế TNCN hiện hành và dữ liệu chấm công.</p>
+            </body>
+            </html>
+        `;
+
+        // ... (Giữ nguyên logic xuất PDF)
+        try {
+            const { uri } = await Print.printToFileAsync({ html: htmlContent });
+            
+            Alert.alert(
+                "Thành công",
+                `Đã tạo bảng lương cho tháng ${currentMonth}/${currentYear}.`,
+                [
+                    { 
+                        text: "Xem & Chia sẻ PDF", 
+                        onPress: async () => {
+                            if (!(await Sharing.isAvailableAsync())) {
+                                Alert.alert("Lỗi", "Chức năng chia sẻ không khả dụng trên thiết bị này.");
+                                return;
+                            }
+                            await Sharing.shareAsync(uri);
+                        }
+                    },
+                    { text: "Đóng", style: "cancel" }
+                ]
+            );
+
+        } catch (error) {
+            console.error("Lỗi tạo PDF:", error);
+            Alert.alert("Lỗi", "Không thể tạo file PDF. Vui lòng kiểm tra cài đặt Expo.");
         }
-        
-        return (
-            <View style={styles.item}>
-                <Text style={styles.itemDate}>{formattedDate}</Text>
-                <View style={styles.itemDetail}>
-                    <Text>Check-in: <Text style={{ fontWeight: '600' }}>{checkInTime}</Text></Text>
-                    <Text>Check-out: <Text style={{ fontWeight: '600' }}>{checkOutTime}</Text></Text>
-                    <Text style={styles.hoursText}>Giờ làm: {hoursWorked.toFixed(2)} giờ</Text>
-                </View>
-            </View>
-        );
     };
-
+    
+    // Rút gọn các biến từ payrollResult
+    const {
+        monthlyGrossSalary, totalWorkingHours, compulsoryInsurance,
+        incomeSubjectToTax, taxableIncome, pitAmount, netSalary,
+        totalDependentDeduction
+    } = payrollResult;
+    
+    // ... (Giữ nguyên phần render JSX)
     if (isLoading) {
         return (
             <View style={styles.loadingContainer}>
@@ -211,45 +397,89 @@ export default function BangLuongScreen({ route }: any) {
     }
     
     return (
-        <View style={styles.container}>
+        <ScrollView style={styles.container}>
             <Text style={styles.title}>💰 Bảng lương: {user.name}</Text>
             
             <View style={styles.summaryBox}>
                 <Text style={styles.summaryText}>Tháng: <Text style={{fontWeight: 'bold'}}>{currentMonth}/{currentYear}</Text></Text>
                 
-                <Text style={styles.salaryBaseText}>Lương hợp đồng: <Text style={{fontWeight: 'bold'}}>{formatCurrency(user.salary || 0)}</Text></Text>
-                <Text style={styles.salaryBaseText}>Phụ cấp cố định: <Text style={{fontWeight: 'bold'}}>{formatCurrency(user.allowance || 0)}</Text></Text>
-                <Text style={styles.salaryBaseText}>Tổng giờ làm thực tế: <Text style={{fontWeight: 'bold'}}>{totalWorkingHours.toFixed(2)} giờ</Text></Text>
+                <Text style={styles.salaryBaseText}>Lương hợp đồng (Đóng BH): <Text style={{fontWeight: 'bold'}}>{formatCurrency(monthlyContractSalary)}</Text></Text>
+                <Text style={styles.salaryBaseText}>Phụ cấp cố định: <Text style={{fontWeight: 'bold'}}>{formatCurrency(monthlyAllowance)}</Text></Text>
+                <Text style={styles.salaryBaseText}>Tổng giờ làm thực tế: <Text style={{fontWeight: 'bold'}}>{totalWorkingHours.toFixed(2)} giờ (Chuẩn: {STANDARD_WORKING_HOURS} giờ)</Text></Text>
 
                 <View style={styles.divider} />
                 
-                <Text style={styles.summaryText}>1. Tổng lương Gross (Ước tính): <Text style={styles.grossAmount}>{formatCurrency(monthlyGrossSalary)}</Text></Text>
+                <Text style={styles.summaryText}>**1. Tổng lương Gross (Ước tính):** <Text style={styles.grossAmount}>{formatCurrency(monthlyGrossSalary)}</Text></Text>
                 
                 <Text style={styles.deductionText}>- 2. Bảo hiểm (10.5%): <Text style={styles.deductionAmount}>{formatCurrency(compulsoryInsurance)}</Text></Text>
-                <Text style={styles.deductionText}>- 3. Thuế TNCN: <Text style={styles.deductionAmount}>{formatCurrency(pitAmount)}</Text></Text>
+                
+                <View style={styles.divider} /> 
+                
+                <Text style={styles.summaryText}>**Thu nhập chịu thuế (Gross - BH):** <Text style={styles.grossAmount}>{formatCurrency(incomeSubjectToTax)}</Text></Text>
+
+                <Text style={styles.deductionText}>- 3. Giảm trừ Bản thân: <Text style={styles.deductionAmount}>{formatCurrency(PERSONAL_DEDUCTION)}</Text></Text>
+                
+                {numDependents > 0 && (
+                    <Text style={styles.deductionText}>
+                        - 4. Giảm trừ NPT ({numDependents} người): <Text style={styles.deductionAmount}>{formatCurrency(totalDependentDeduction)}</Text>
+                    </Text>
+                )}
+
+                <View style={styles.divider} />
+                
+                <Text style={styles.summaryText}>**Thu nhập tính thuế (TNTT):** <Text style={styles.grossAmount}>{formatCurrency(taxableIncome)}</Text></Text>
+                <Text style={styles.deductionText}>- 5. Thuế TNCN: <Text style={styles.deductionAmount}>{formatCurrency(pitAmount)}</Text></Text>
 
                 <View style={styles.divider} />
 
                 <Text style={styles.total}>
-                    4. Tổng lương NET thực nhận: <Text style={styles.totalAmount}>{formatCurrency(netSalary)}</Text>
+                    **6. Tổng lương NET thực nhận:** <Text style={styles.totalAmount}>{formatCurrency(netSalary)}</Text>
                 </Text>
+
+                <TouchableOpacity style={styles.pdfButton} onPress={createPDF} activeOpacity={0.8}>
+                    <Text style={styles.pdfButtonText}>📤 Xuất Bảng Lương PDF</Text>
+                </TouchableOpacity>
+
             </View>
 
-            <Text style={styles.historyTitle}>Chi tiết công</Text>
+            <Text style={styles.historyTitle}>Chi tiết công làm việc</Text>
             <FlatList
                 data={attendance.sort((a,b)=>b.date.localeCompare(a.date))}
                 keyExtractor={(item,index)=>index.toString()}
-                renderItem={renderItem}
+                renderItem={({ item }) => {
+                    const formattedDate = new Date(item.date + 'T00:00:00').toLocaleDateString('vi-VN'); 
+                    const checkInTime = getLocalTime(item.checkIn);
+                    const checkOutTime = getLocalTime(item.checkOut);
+                    
+                    let hoursWorked = 0;
+                    if (item.checkIn && item.checkOut) {
+                        const diffInMilliseconds = new Date(item.checkOut).getTime() - new Date(item.checkIn).getTime();
+                        hoursWorked = (diffInMilliseconds / (1000 * 60 * 60));
+                    }
+
+                    return (
+                        <View style={styles.item}>
+                            <Text style={styles.itemDate}>{formattedDate}</Text>
+                            <View style={styles.itemDetail}>
+                                <Text>Check-in: <Text style={{ fontWeight: '600' }}>{checkInTime}</Text></Text>
+                                <Text>Check-out: <Text style={{ fontWeight: '600' }}>{checkOutTime}</Text></Text>
+                                <Text style={styles.hoursText}>Giờ làm: {Math.max(0, hoursWorked).toFixed(2)} giờ</Text>
+                            </View>
+                        </View>
+                    );
+                }}
                 ListEmptyComponent={(
                     <Text style={{ textAlign: 'center', color: '#999', paddingTop: 30 }}>
                         Chưa có ngày công nào trong tháng này.
                     </Text>
                 )}
                 contentContainerStyle={attendance.length === 0 ? styles.listEmptyStyle : null}
+                scrollEnabled={false}
             />
-        </View>
+        </ScrollView>
     );
 }
+// Styles được giữ nguyên
 
 const styles = StyleSheet.create({
     container: { flex: 1, padding: 16, backgroundColor: '#f5f5f5' },
@@ -356,5 +586,17 @@ const styles = StyleSheet.create({
     listEmptyStyle: { 
         flexGrow: 1, 
         justifyContent: 'flex-start' 
+    },
+    pdfButton: {
+        backgroundColor: '#4CAF50',
+        padding: 12,
+        borderRadius: 8,
+        marginTop: 15,
+        alignItems: 'center',
+    },
+    pdfButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
+        fontSize: 16,
     }
 });

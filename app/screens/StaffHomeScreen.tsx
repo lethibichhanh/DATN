@@ -6,13 +6,13 @@ import { collection, doc, onSnapshot } from "firebase/firestore";
 // React Imports
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    FlatList,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 import { db } from "../../firebaseConfig";
 import type { RootStackParamList, User } from "../../types";

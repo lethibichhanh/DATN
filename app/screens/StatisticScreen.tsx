@@ -354,7 +354,7 @@ export default function ThongKeScreen() {
     }, [filteredHoaDons]);
 
 
-    // --- VI. EXPORT PDF ---
+    // --- VI. EXPORT PDF (ĐÃ CẬP NHẬT TÊN NHÀ THUỐC) ---
     const handleExportPDF = useCallback(async () => {
         const { doanhThu, chiPhi, loiNhuan, soHoaDon, soKhachHang } = thongKeTongQuan;
         const { TienMat, ChuyenKhoan, Khac } = thanhToanData;
@@ -405,11 +405,19 @@ export default function ThongKeScreen() {
                     hr { border: 0; border-top: 1px solid #eee; margin: 20px 0; }
                     .summary-item { margin-bottom: 10px; padding: 5px 0; }
                     table { table-layout: fixed; }
+                    .pharmacy-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #4a90e2; padding-bottom: 10px; }
+                    .pharmacy-header h2 { color: #4a90e2; margin: 0; font-size: 26px; }
+                    .footer { text-align: center; margin-top: 50px; border-top: 1px solid #ddd; padding-top: 10px; font-size: 12px; color: #666; }
                 </style>
             </head>
             <body>
-                <h1 style="text-align:center;">📑 Báo cáo thống kê</h1>
-                <h3 style="text-align:center;">Phạm vi: ${fromDate.toLocaleDateString()} - ${toDate.toLocaleDateString()}</h3>
+                <div class="pharmacy-header">
+                    <h2>NHÀ THUỐC PHÚC HẠNH</h2>
+                    <p style="font-size: 14px; margin: 5px 0;">Báo Cáo Thống Kê Kinh Doanh</p>
+                </div>
+                
+                <h1 style="text-align:center;">📑 BÁO CÁO CHI TIẾT KINH DOANH</h1>
+                <h3 style="text-align:center; color: #333;">Phạm vi: ${fromDate.toLocaleDateString()} - ${toDate.toLocaleDateString()}</h3>
                 <p><b>Ngày xuất báo cáo:</b> ${new Date().toLocaleString('vi-VN')}</p>
                 <hr/>
 
@@ -443,6 +451,10 @@ export default function ThongKeScreen() {
                 <h2>IV. CHI TIẾT LÃI/LỖ THEO LOẠI THUỐC</h2>
                 ${thuocTableHtml}
 
+                <div class="footer">
+                    <p>Báo cáo được xuất tự động từ hệ thống quản lý Nhà thuốc Phúc Hạnh.</p>
+                    <p>Ngày ${new Date().toLocaleDateString('vi-VN')}.</p>
+                </div>
             </body>
             </html>`;
 
@@ -495,7 +507,7 @@ export default function ThongKeScreen() {
                 </View>
             </View>
 
-            {/* --- QUICK SELECT BUTTONS (ĐÃ THÊM NÚT 'Hôm nay') --- */}
+            {/* --- QUICK SELECT BUTTONS (ĐÃ CẬP NHẬT GIAO DIỆN) --- */}
             <View style={styles.quickSelectContainer}>
                 {/* 🔥 NÚT BỔ SUNG: Lọc theo ngày (Hôm nay) */}
                 <TouchableOpacity style={styles.quickSelectBtn} onPress={() => handleQuickSelect('day')}>
@@ -513,7 +525,7 @@ export default function ThongKeScreen() {
                 </TouchableOpacity>
             </View>
 
-            {/* --- TỔNG QUAN (ĐÃ LỌC) --- */}
+            {/* --- TỔNG QUAN (ĐÃ LỌC - CẬP NHẬT GIAO DIỆN CARD) --- */}
             <Text style={styles.section}>
                 📌 Tổng quan ({fromDate.toLocaleDateString('vi-VN')} - {toDate.toLocaleDateString('vi-VN')})
             </Text>
@@ -633,7 +645,7 @@ export default function ThongKeScreen() {
                 )}
             </View>
 
-            {/* --- XUẤT PDF --- */}
+            {/* --- XUẤT PDF (CẬP NHẬT GIAO DIỆN BUTTON) --- */}
             <TouchableOpacity onPress={handleExportPDF} style={styles.exportBtn}>
                 <Text style={{ color: "#fff", fontWeight: "bold", fontSize: 16 }}>
                     📄 Xuất báo cáo PDF đầy đủ (Lãi/Lỗ)
@@ -684,7 +696,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
 
-    // Styles cho Quick Select
+    // Styles cho Quick Select (ĐÃ CẬP NHẬT GIAO DIỆN CHUẨN STATISTIC)
     quickSelectContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -694,12 +706,14 @@ const styles = StyleSheet.create({
         flex: 1,
         marginHorizontal: 4,
         padding: 10,
-        borderRadius: 8,
-        backgroundColor: '#7FC7AF',
+        borderRadius: 20, // Pill shape
+        backgroundColor: '#e6f0ff', // Light blue background
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#4a90e2',
     },
     quickSelectText: {
-        color: '#fff',
+        color: '#4a90e2', // Primary color text
         fontWeight: 'bold',
         fontSize: 13,
     },
@@ -717,20 +731,33 @@ const styles = StyleSheet.create({
         marginVertical: 4,
         lineHeight: 20,
     },
+    // Styles cho Summary Card (ĐÃ CẬP NHẬT GIAO DIỆN CHUẨN STATISTIC)
     summaryCard: {
         padding: 15,
-        borderRadius: 10,
-        backgroundColor: '#e6f0ff',
-        borderLeftWidth: 5,
-        borderLeftColor: '#4a90e2',
-        marginBottom: 10,
+        borderRadius: 12,
+        backgroundColor: '#fff', // White background
+        borderWidth: 1,
+        borderColor: '#ddd', // Soft border
+        marginBottom: 20,
+        // Add subtle shadow for 'card' effect
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 3,
+        elevation: 2,
     },
 
+    // Styles cho Export Button (ĐÃ CẬP NHẬT GIAO DIỆN)
     exportBtn: {
         backgroundColor: "#4a90e2",
         marginTop: 30,
-        padding: 15,
-        borderRadius: 10,
+        padding: 18, // Slightly larger padding
+        borderRadius: 12, // More rounded corners
         alignItems: "center",
+        shadowColor: "#4a90e2",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+        elevation: 5,
     },
 });
