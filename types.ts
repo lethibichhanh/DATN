@@ -188,6 +188,9 @@ export type RootStackParamList = {
     LichLamViec: { user: User }; // Lịch đã áp dụng/hiển thị
     SetupLichLamViec: { user: User }; // ✅ Lịch MẪU (Template)
 
+    // ⭐ MÀN HÌNH MỚI CHO ADMIN (ĐÃ THÊM)
+    AttendanceHistoryAdmin: undefined; 
+
     // ⭐ THÊM CÁC MÀN HÌNH THIẾU LOGIC
     TaoHoaDonMoi: undefined; // Màn hình bắt đầu tạo hóa đơn
     ThongTinNhanVien: { user: User }; // Chi tiết nhân viên

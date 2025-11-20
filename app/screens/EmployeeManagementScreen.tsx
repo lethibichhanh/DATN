@@ -14,13 +14,26 @@ import {
 import { db } from "../../firebaseConfig";
 import type { User } from "../../types";
 
+// ⭐ 1. INTERFACE MỚI CHO TRẠNG THÁI CHẤM CÔNG HÔM NAY
+interface TodayAttendanceStatus {
+    [uid: string]: {
+        checkIn: string | null;
+        checkOut: string | null;
+    }
+}
+
 export default function QuanLyNhanVienScreen({ navigation }: any) {
     const [users, setUsers] = useState<User[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    // ⭐ 2. STATE MỚI CHO TRẠNG THÁI CHẤM CÔNG HÔM NAY
+    const [todayStatus, setTodayStatus] = useState<TodayAttendanceStatus>({});
+    
+    // Lấy ngày hiện tại ở định dạng YYYY-MM-DD
+    const today = new Date().toISOString().slice(0, 10); 
 
+    // LOGIC 1: FETCH DANH SÁCH NHÂN VIÊN (GIỮ NGUYÊN)
     useEffect(() => {
         const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
-            // Lọc các user không hợp lệ (ví dụ: thiếu tên) để tránh lỗi 'charAt'
             const data = snapshot.docs
                 .map((d) => ({ uid: d.id, ...d.data() } as User))
                 .filter(user => user.name && typeof user.name === 'string'); 
@@ -34,6 +47,34 @@ export default function QuanLyNhanVienScreen({ navigation }: any) {
         });
         return () => unsub();
     }, []);
+
+    // ⭐ 3. LOGIC 2: LẮNG NGHE TRẠNG THÁI CHẤM CÔNG HÔM NAY
+    useEffect(() => {
+        // Lắng nghe toàn bộ collection 'attendance'
+        const q = collection(db, "attendance"); 
+        
+        const unsub = onSnapshot(q, (snapshot) => {
+            const newTodayStatus: TodayAttendanceStatus = {};
+            
+            snapshot.docs.forEach((doc) => {
+                const data = doc.data();
+                // Lọc để chỉ lấy bản ghi của ngày hiện tại (YYYY-MM-DD)
+                if (data.date === today) {
+                    newTodayStatus[data.uid] = {
+                        // Firebase Timestamps/Dates có thể cần chuyển đổi thành string
+                        checkIn: data.checkIn ? data.checkIn.toString() : null, 
+                        checkOut: data.checkOut ? data.checkOut.toString() : null,
+                    };
+                }
+            });
+            
+            setTodayStatus(newTodayStatus);
+        }, (error) => {
+            console.error("Lỗi khi tải trạng thái chấm công:", error);
+        });
+        
+        return () => unsub();
+    }, [today]);
 
     const handleDelete = (uid: string, name: string) => {
         Alert.alert(
@@ -75,8 +116,32 @@ export default function QuanLyNhanVienScreen({ navigation }: any) {
     ];
 
     const renderItem = ({ item }: { item: User }) => {
-        // Kiểm tra an toàn cho item.name
         const initial = item.name ? item.name.charAt(0).toUpperCase() : '?'; 
+        // ⭐ LẤY TRẠNG THÁI TỪ STATE MỚI
+        const status = todayStatus[item.uid];
+        
+        // Hàm hiển thị trạng thái ngắn gọn
+        const renderAttendanceStatus = () => {
+            const timeOptions: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', hour12: false };
+            
+            if (!status || !status.checkIn) {
+                return <Text style={styles.statusRed}>Chưa Check-in</Text>;
+            }
+            // Nếu có cả check-in và check-out
+            if (status.checkIn && status.checkOut) {
+                // Giả định `data.checkOut` là một chuỗi ISO hợp lệ hoặc Firestore Timestamp đã được chuyển đổi
+                const checkOutTime = new Date(status.checkOut).toLocaleTimeString('vi-VN', timeOptions);
+                return <Text style={styles.statusGreen}>Đã Check-out ({checkOutTime})</Text>;
+            }
+            // Nếu chỉ có check-in
+            if (status.checkIn) {
+                // Giả định `data.checkIn` là một chuỗi ISO hợp lệ hoặc Firestore Timestamp đã được chuyển đổi
+                const checkInTime = new Date(status.checkIn).toLocaleTimeString('vi-VN', timeOptions);
+                return <Text style={styles.statusOrange}>Đang làm việc (Check-in: {checkInTime})</Text>;
+            }
+            return <Text style={styles.statusRed}>Chưa Check-in</Text>;
+        };
+
 
         return (
             <View style={styles.itemCard}>
@@ -95,6 +160,12 @@ export default function QuanLyNhanVienScreen({ navigation }: any) {
                                 {item.salary ? `${item.salary.toLocaleString('vi-VN')} VNĐ` : "Chưa thiết lập"}
                             </Text>
                         </Text>
+                        {/* ⭐ HIỂN THỊ TRẠNG THÁI CHẤM CÔNG */}
+                        <View style={styles.attendanceStatusRow}>
+                            <Text style={styles.attendanceLabel}>Trạng thái hôm nay:</Text> 
+                            {renderAttendanceStatus()}
+                        </View>
+                        {/* ---------------------------------- */}
                     </View>
                 </View>
 
@@ -252,6 +323,29 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#555',
         marginTop: 5,
+    },
+    // ⭐ STYLE MỚI CHO TRẠNG THÁI CHẤM CÔNG
+    attendanceStatusRow: { 
+        flexDirection: 'row', 
+        marginTop: 5,
+        flexWrap: 'wrap',
+    },
+    attendanceLabel: {
+        fontSize: 14,
+        color: '#555',
+        marginRight: 5,
+    },
+    statusRed: {
+        fontWeight: '600',
+        color: '#E53935', // Chưa Check-in
+    },
+    statusOrange: {
+        fontWeight: '600',
+        color: '#FF9800', // Đang làm việc (Check-in rồi)
+    },
+    statusGreen: {
+        fontWeight: '600',
+        color: '#4CAF50', // Đã Check-out
     },
     // Hàng nút chức năng
     buttonRow: { 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, FlatList, StyleSheet, ActivityIndicator } from "react-native";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
-import { db } from "../../firebaseConfig"; // Đảm bảo firebaseConfig.ts có db
+import { db } from "../../firebaseConfig"; 
 
 // ==========================================================
 // ⭐ HẰNG SỐ & HÀM TÍNH TOÁN LƯƠNG VIỆT NAM (SIMPLIFIED)
@@ -14,13 +14,13 @@ const PERSONAL_DEDUCTION = 11000000; // 11 triệu VNĐ (năm 2024)
 
 // Biểu thuế lũy tiến từng phần (Simplified)
 const TAX_BANDS = [
-    { limit: 5000000, rate: 0.05 },    // 5%
-    { limit: 10000000, rate: 0.10 },   // 10%
-    { limit: 18000000, rate: 0.15 },   // 15%
-    { limit: 32000000, rate: 0.20 },   // 20%
-    { limit: 52000000, rate: 0.25 },   // 25%
-    { limit: 80000000, rate: 0.30 },   // 30%
-    { limit: Infinity, rate: 0.35 },   // 35%
+    { limit: 5000000, rate: 0.05 },     // 5%
+    { limit: 10000000, rate: 0.10 },    // 10%
+    { limit: 18000000, rate: 0.15 },    // 15%
+    { limit: 32000000, rate: 0.20 },    // 20%
+    { limit: 52000000, rate: 0.25 },    // 25%
+    { limit: 80000000, rate: 0.30 },    // 30%
+    { limit: Infinity, rate: 0.35 },    // 35%
 ];
 
 // Hàm tính Thuế Thu nhập Cá nhân (TNCN)
@@ -33,9 +33,10 @@ const calculatePIT = (assessableIncome: number): number => {
     for (const band of TAX_BANDS) {
         if (remainingIncome <= 0) break;
 
+        const lowerLimit = TAX_BANDS[TAX_BANDS.indexOf(band) - 1]?.limit || 0;
         const taxableBase = band.limit === Infinity 
             ? remainingIncome 
-            : Math.min(remainingIncome, band.limit - (TAX_BANDS[TAX_BANDS.indexOf(band) - 1]?.limit || 0));
+            : Math.min(remainingIncome, band.limit - lowerLimit);
 
         pit += taxableBase * band.rate;
         remainingIncome -= taxableBase;
@@ -87,9 +88,9 @@ export default function BangLuongScreen({ route }: any) {
     const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
     const [monthlyGrossSalary, setMonthlyGrossSalary] = useState<number>(0);
     const [totalWorkingHours, setTotalWorkingHours] = useState<number>(0);
-    const [compulsoryInsurance, setCompulsoryInsurance] = useState<number>(0); // Bảo hiểm thực tế trừ
-    const [pitAmount, setPitAmount] = useState<number>(0); // Thuế TNCN
-    const [netSalary, setNetSalary] = useState<number>(0); // Lương thực nhận
+    const [compulsoryInsurance, setCompulsoryInsurance] = useState<number>(0); 
+    const [pitAmount, setPitAmount] = useState<number>(0); 
+    const [netSalary, setNetSalary] = useState<number>(0); 
     const [isLoading, setIsLoading] = useState(true);
 
     const currentDate = new Date();
@@ -144,20 +145,16 @@ export default function BangLuongScreen({ route }: any) {
             // 3. Tính Bảo hiểm bắt buộc (CI)
             const calculatedCI_Base = Math.round(monthlyContractSalary * SI_RATE_EMPLOYEE);
 
-            // ⭐ LOGIC FIX LƯƠNG ÂM: Chỉ trừ Bảo hiểm khi Lương Gross đủ trang trải (để Net Salary >= 0)
             let actualCI = 0;
             if (totalGrossSalary >= calculatedCI_Base) {
-                // Nếu Lương Gross đủ, trừ toàn bộ
                 actualCI = calculatedCI_Base;
             } else if (totalGrossSalary > 0) {
-                // Nếu Lương Gross không đủ nhưng > 0, tạm thời không trừ để tránh lương âm.
-                // Khoản 945.000 (CI Base) sẽ được coi là nợ hoặc xử lý vào tháng sau.
-                actualCI = 0;
+                actualCI = 0; 
             }
-            setCompulsoryInsurance(actualCI); // Gán giá trị Bảo hiểm thực tế đã trừ
+            setCompulsoryInsurance(actualCI); 
 
             // 4. Tính Thu nhập tính thuế (Assessable Income)
-            const taxableIncome = totalGrossSalary - actualCI; // Dùng actualCI đã điều chỉnh
+            const taxableIncome = totalGrossSalary - actualCI; 
             const assessableIncome = taxableIncome > PERSONAL_DEDUCTION 
                 ? taxableIncome - PERSONAL_DEDUCTION 
                 : 0;
@@ -167,7 +164,7 @@ export default function BangLuongScreen({ route }: any) {
             setPitAmount(calculatedPIT);
 
             // 6. Tính Lương Net
-            const finalNetSalary = totalGrossSalary - actualCI - calculatedPIT; // Dùng actualCI
+            const finalNetSalary = totalGrossSalary - actualCI - calculatedPIT; 
             setNetSalary(finalNetSalary);
             
             setIsLoading(false);
@@ -181,6 +178,8 @@ export default function BangLuongScreen({ route }: any) {
 
 
     const renderItem = ({ item }: { item: AttendanceRecord }) => {
+        const formattedDate = new Date(item.date + 'T00:00:00').toLocaleDateString('vi-VN'); 
+        
         const checkInTime = item.checkIn ? new Date(item.checkIn).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : "--";
         const checkOutTime = item.checkOut ? new Date(item.checkOut).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : "--";
         
@@ -192,7 +191,7 @@ export default function BangLuongScreen({ route }: any) {
         
         return (
             <View style={styles.item}>
-                <Text style={styles.itemDate}>{item.date}</Text>
+                <Text style={styles.itemDate}>{formattedDate}</Text>
                 <View style={styles.itemDetail}>
                     <Text>Check-in: <Text style={{ fontWeight: '600' }}>{checkInTime}</Text></Text>
                     <Text>Check-out: <Text style={{ fontWeight: '600' }}>{checkOutTime}</Text></Text>
@@ -226,7 +225,6 @@ export default function BangLuongScreen({ route }: any) {
                 
                 <Text style={styles.summaryText}>1. Tổng lương Gross (Ước tính): <Text style={styles.grossAmount}>{formatCurrency(monthlyGrossSalary)}</Text></Text>
                 
-                {/* HIỂN THỊ KHOẢN TRỪ BẢO HIỂM THỰC TẾ ĐÃ ĐƯỢC ĐIỀU CHỈNH */}
                 <Text style={styles.deductionText}>- 2. Bảo hiểm (10.5%): <Text style={styles.deductionAmount}>{formatCurrency(compulsoryInsurance)}</Text></Text>
                 <Text style={styles.deductionText}>- 3. Thuế TNCN: <Text style={styles.deductionAmount}>{formatCurrency(pitAmount)}</Text></Text>
 
@@ -242,7 +240,12 @@ export default function BangLuongScreen({ route }: any) {
                 data={attendance.sort((a,b)=>b.date.localeCompare(a.date))}
                 keyExtractor={(item,index)=>index.toString()}
                 renderItem={renderItem}
-                ListEmptyComponent={<Text style={{ textAlign: 'center', color: '#999' }}>Chưa có ngày công nào trong tháng này.</Text>}
+                ListEmptyComponent={(
+                    <Text style={{ textAlign: 'center', color: '#999', paddingTop: 30 }}>
+                        Chưa có ngày công nào trong tháng này.
+                    </Text>
+                )}
+                contentContainerStyle={attendance.length === 0 ? styles.listEmptyStyle : null}
             />
         </View>
     );
@@ -349,5 +352,9 @@ const styles = StyleSheet.create({
         fontStyle: 'italic',
         color: 'green',
         fontWeight: 'bold',
+    },
+    listEmptyStyle: { 
+        flexGrow: 1, 
+        justifyContent: 'flex-start' 
     }
 });

@@ -22,7 +22,7 @@ interface AttendanceRecord {
     checkOut: string | null; // ISO string
 }
 
-// Khai báo kiểu cho user (Tạm thời)
+// Khai báo kiểu cho user
 interface User {
     uid: string;
     name: string;
@@ -30,7 +30,7 @@ interface User {
 }
 
 export default function ChamCongScreen({ route }: any) {
-    const { user } = route.params as { user: User }; // Ép kiểu để sử dụng User
+    const { user } = route.params as { user: User }; 
     const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isChecking, setIsChecking] = useState(false);
@@ -41,7 +41,6 @@ export default function ChamCongScreen({ route }: any) {
     // Fetch dữ liệu chấm công của nhân viên
     useEffect(() => {
         setIsLoading(true);
-        // Lấy tất cả bản ghi của user hiện tại
         const q = query(collection(db, "attendance"), where("uid", "==", user.uid));
         
         const unsub = onSnapshot(q, (snapshot) => {
@@ -71,7 +70,6 @@ export default function ChamCongScreen({ route }: any) {
             return;
         }
         
-        // --- LOGIC CHECK-IN ---
         try {
             setIsChecking(true);
             await addDoc(collection(db, "attendance"), {
@@ -102,7 +100,6 @@ export default function ChamCongScreen({ route }: any) {
             return;
         }
         
-        // --- LOGIC CHECK-OUT ---
         try {
             setIsChecking(true);
             const attendanceRef = doc(db, "attendance", todayRecord.id);
