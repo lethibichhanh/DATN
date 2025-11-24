@@ -305,7 +305,7 @@ export default function TaiKhoanScreen({ navigation }: any) {
 
                     <ActionButton
                         title="Cập nhật thông tin cá nhân"
-                        subTitle="Tên, số điện thoại, địa chỉ, v.v."
+                        subTitle="Tên, v.v."
                         icon="create-outline"
                         color="#4a90e2"
                         onPress={() => navigation.navigate("DangKyNhanVien", { editUser: user })}
@@ -322,7 +322,7 @@ export default function TaiKhoanScreen({ navigation }: any) {
                     {/* NÚT CÀI ĐẶT MỚI */}
                     <ActionButton
                         title="Cài đặt Ứng dụng"
-                        subTitle="Chủ đề, thông báo, ngôn ngữ..."
+                        subTitle="Chủ đề, thông báo,..."
                         icon="options-outline"
                         color="#3498db" 
                         onPress={() => navigation.navigate("SettingsScreen")} // Cần định nghĩa SettingsScreen trong navigator

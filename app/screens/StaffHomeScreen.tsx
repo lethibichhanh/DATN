@@ -22,12 +22,12 @@ import type { RootStackParamList, User } from "../../types";
 // =======================================================
 const useCurrentUser = (): User | null => {
     // State chứa đối tượng User đầy đủ từ Firestore
-    const [currentUser, setCurrentUser] = useState<User | null>(null); 
+    const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [isLoadingAuth, setIsLoadingAuth] = useState(true);
 
     useEffect(() => {
         // Khởi tạo Auth
-        const auth = getAuth(); 
+        const auth = getAuth();
         let unsubscribeFirestore: (() => void) | null = null;
         
         // 1. Lắng nghe trạng thái đăng nhập (Authentication State)
@@ -74,14 +74,18 @@ const useCurrentUser = (): User | null => {
     }, []);
 
     // Bạn có thể trả về một đối tượng chứa currentUser và isLoadingAuth nếu cần
-    return currentUser; 
+    return currentUser;
 };
 
 
 // =======================================================
 // 💊 CÁC CHỨC NĂNG CHUNG CỦA NHÂN VIÊN
+// ĐÃ THÊM CHỨC NĂNG QUẢN LÝ KHÁCH HÀNG
 // =======================================================
 const features = [
+    // CRM
+    { title: "Quản lý Khách hàng", icon: "people-outline", screen: "KhachHang" }, // ✅ THÊM MỚI
+
     // Chức năng quản lý
     { title: "Quản lý Hóa đơn", icon: "receipt-outline", screen: "HoaDon" },
     { title: "Quản lý Nhập kho", icon: "download-outline", screen: "NhapKho" },

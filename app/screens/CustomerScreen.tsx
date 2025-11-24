@@ -168,7 +168,7 @@ export default function KhachHangScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>👥 Quản Lý Khách Hàng (CRM)</Text>
+      <Text style={styles.title}>👥 Quản Lý Khách Hàng </Text>
 
       {/* --- HEADER CHỨC NĂNG --- */}
       <View style={styles.header}>
