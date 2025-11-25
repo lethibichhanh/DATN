@@ -2,19 +2,18 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { useEffect, useState } from "react";
 import {
+    Alert,
     SafeAreaView,
     ScrollView,
     StyleSheet,
-    Text,
-    View,
-    TouchableOpacity,
     Switch,
-    Alert,
-    Platform,
+    Text,
+    TouchableOpacity,
+    View
 } from "react-native";
 // Cần import I18n thay vì i18n mặc định để khởi tạo instance
-import { I18n } from 'i18n-js'; 
-import * as Localization from 'expo-localization'; 
+import * as Localization from 'expo-localization';
+import { I18n } from 'i18n-js';
 
 
 // --------------------------------------------------------
@@ -344,7 +343,7 @@ export default function SettingsScreen({ navigation }: any) {
                     
                     <SettingItem 
                         title={t('version')}
-                        subTitle="Sản phẩm thuộc đề tài báo cáo tốt nghiệp."
+                        subTitle="Sản phẩm "
                         icon="information-circle-outline"
                         color="#9b59b6"
                         type="info"

@@ -17,11 +17,12 @@ import {
 import { db } from "../../firebaseConfig";
 import type { RootStackParamList } from "../../types";
 
-// Khai báo kiểu dữ liệu cho ca làm việc (Shift)
+// ⭐ Cập nhật kiểu dữ liệu cho ca làm việc (Shift) để có field date
 interface Shift {
     day: string; // Thứ Hai, Thứ Ba, ...
-    start: string; // Giờ bắt đầu (HH:mm)
-    end: string; // Giờ kết thúc (HH:mm)
+    dateKey: string; // YYYY-MM-DD (Ví dụ: 2025-11-25) - Dùng làm key duy nhất
+    start: string; // Giờ bắt đầu (HH:mm) hoặc OFF
+    end: string; // Giờ kết thúc (HH:mm) hoặc OFF
 }
 
 // ⭐ KIỂU USER TỐI THIỂU CHO NAVIGATION
@@ -38,16 +39,52 @@ type ScheduleSetupScreenProps = {
     route: RouteProp<RootStackParamList, "SetupLichLamViec">;
 };
 
-// Dữ liệu mặc định 7 ngày trong tuần
-const INITIAL_SCHEDULE: Shift[] = [
-    { day: "Thứ Hai", start: "08:00", end: "17:00" },
-    { day: "Thứ Ba", start: "08:00", end: "17:00" },
-    { day: "Thứ Tư", start: "08:00", end: "17:00" },
-    { day: "Thứ Năm", start: "08:00", end: "17:00" },
-    { day: "Thứ Sáu", start: "08:00", end: "17:00" },
-    { day: "Thứ Bảy", start: "09:00", end: "13:00" },
-    { day: "Chủ Nhật", start: "OFF", end: "OFF" }, // Mặc định OFF Chủ Nhật
-];
+// =======================================================
+// ⭐ HÀM TIỆN ÍCH MỚI: TẠO LỊCH 7 NGÀY DỰA TRÊN NGÀY THÁNG THỰC
+// =======================================================
+const getInitialSchedule = (): Shift[] => {
+    const today = new Date();
+    // 0 = Chủ Nhật, 1 = Thứ Hai, ...
+    const dayOfWeek = today.getDay(); 
+    
+    // Tính ngày Thứ Hai của tuần hiện tại (để luôn bắt đầu từ Thứ Hai)
+    // Nếu hôm nay là Chủ Nhật (0), diffToMonday là -6 (để lùi về Thứ Hai tuần trước)
+    // Nếu hôm nay là Thứ Hai (1), diffToMonday là 0
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(today);
+    monday.setDate(today.getDate() + diffToMonday);
+    
+    const days = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+    
+    const schedule: Shift[] = [];
+    
+    for (let i = 0; i < 7; i++) {
+        const currentDate = new Date(monday);
+        currentDate.setDate(monday.getDate() + i);
+        
+        // Lấy tên ngày trong tuần (Thứ Hai,...)
+        const dayIndex = currentDate.getDay(); // 0=CN, 1=T2, ...
+        const dayName = days[dayIndex];
+        
+        // Định dạng YYYY-MM-DD làm key
+        const dateKey = currentDate.toISOString().split('T')[0];
+
+        schedule.push({
+            day: dayName,
+            dateKey: dateKey,
+            start: dayName === "Chủ Nhật" ? "OFF" : "08:00",
+            end: dayName === "Chủ Nhật" ? "OFF" : "17:00",
+        });
+    }
+
+    // ⭐ Sắp xếp lại để Thứ Hai là đầu tiên
+    const sortedSchedule = schedule.sort((a, b) => {
+        const daysOrder = ["Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy", "Chủ Nhật"];
+        return daysOrder.indexOf(a.day) - daysOrder.indexOf(b.day);
+    });
+
+    return sortedSchedule;
+};
 
 // Hàm kiểm tra định dạng HH:mm
 const isValidTimeFormat = (time: string): boolean => {
@@ -67,9 +104,6 @@ const isTimeValidLogic = (start: string, end: string): boolean => {
         
         // Nếu giờ kết thúc nhỏ hơn hoặc bằng giờ bắt đầu
         if (endTime <= startTime) {
-             // Thử kiểm tra trường hợp qua đêm (ví dụ: 22:00 -> 06:00 ngày hôm sau)
-             // Đây là một giả định chung, nếu không có logic qua đêm, chỉ cần return false
-             // Trong bối cảnh quản lý ca làm, thường ca kết thúc cùng ngày
              return false;
         }
 
@@ -81,14 +115,13 @@ const isTimeValidLogic = (start: string, end: string): boolean => {
 };
 
 // =======================================================
-// Component phụ: ShiftCard
+// Component phụ: ShiftCard (Gần như không thay đổi, chỉ dùng dateKey)
 // =======================================================
 interface ShiftCardProps {
     shift: Shift;
     index: number;
     schedule: Shift[];
     setSchedule: React.Dispatch<React.SetStateAction<Shift[]>>;
-    // ⭐ PROP MỚI: Chỉ báo cáo lỗi của mình cho component cha
     onValidationErrorChange: (index: number, hasError: boolean) => void;
 }
 
@@ -126,7 +159,7 @@ const ShiftCard: React.FC<ShiftCardProps> = React.memo(({
         // ⭐ Báo cáo trạng thái lỗi cục bộ cho component cha
         onValidationErrorChange(index, hasError);
         
-    }, [shift, index, onValidationErrorChange]); // Loại bỏ schedule khỏi dependency
+    }, [shift, index, onValidationErrorChange]);
 
     const updateSchedule = (key: 'start' | 'end', value: string) => {
         // Chỉ cho phép nhập số và dấu hai chấm
@@ -153,14 +186,19 @@ const ShiftCard: React.FC<ShiftCardProps> = React.memo(({
             return newSchedule;
         });
     };
+    
+    // ⭐ Định dạng ngày/tháng để hiển thị
+    const [year, month, day] = shift.dateKey.split('-');
+    const displayDate = `${day}/${month}`;
 
     return (
         <View style={[styles.card, isDayOff ? styles.dayOffCard : { borderLeftColor: '#4a90e2' }]}>
             <View style={styles.header}>
-                <Text style={styles.dayTitle}>{shift.day}</Text>
+                {/* ⭐ HIỂN THỊ CẢ NGÀY TRONG TUẦN VÀ NGÀY/THÁNG */}
+                <Text style={styles.dayTitle}>{shift.day} ({displayDate})</Text>
                 <TouchableOpacity onPress={toggleDayOff}>
                     <Ionicons
-                        name={isDayOff ? "toggle-outline" : "toggle-sharp"} // Dùng sharp cho biểu tượng rõ ràng hơn
+                        name={isDayOff ? "toggle-outline" : "toggle-sharp"} 
                         size={30}
                         color={isDayOff ? "#999" : "#4a90e2"}
                     />
@@ -177,7 +215,7 @@ const ShiftCard: React.FC<ShiftCardProps> = React.memo(({
                             value={shift.start}
                             onChangeText={(text) => updateSchedule('start', text)}
                             placeholder="Bắt đầu (HH:mm)"
-                            keyboardType="numeric" // Thử dùng numeric để gọi bàn phím số
+                            keyboardType="numeric" 
                             maxLength={5}
                         />
                         <Text style={{ marginHorizontal: 10, color: '#666', fontWeight: 'bold' }}>-</Text>
@@ -186,7 +224,7 @@ const ShiftCard: React.FC<ShiftCardProps> = React.memo(({
                             value={shift.end}
                             onChangeText={(text) => updateSchedule('end', text)}
                             placeholder="Kết thúc (HH:mm)"
-                            keyboardType="numeric" // Thử dùng numeric
+                            keyboardType="numeric" 
                             maxLength={5}
                         />
                     </View>
@@ -206,7 +244,9 @@ const ShiftCard: React.FC<ShiftCardProps> = React.memo(({
 // =======================================================
 export default function ScheduleSetupScreen({ navigation, route }: ScheduleSetupScreenProps) {
     
-    // ⚠️ KIỂM TRA AN TOÀN QUAN TRỌNG ĐỂ TRÁNH CRASH ⚠️
+    // ⭐ LẤY LỊCH LÀM VIỆC BAN ĐẦU DỰA TRÊN NGÀY THÁNG THỰC
+    const INITIAL_SCHEDULE = getInitialSchedule();
+    
     const user = route.params?.user as (User | undefined); 
 
     if (!user) {
@@ -219,18 +259,12 @@ export default function ScheduleSetupScreen({ navigation, route }: ScheduleSetup
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     
-    // ⭐ STATE MỚI: Theo dõi lỗi cho từng index (0-6)
-    // Ví dụ: { 0: false, 1: true, 2: false, ... }
     const [shiftErrors, setShiftErrors] = useState<Record<number, boolean>>({});
 
-    // EFFECT TÍNH TOÁN LỖI TỔNG THỂ
-    // Kiểm tra xem có bất kỳ shift nào có lỗi hay không
     const hasValidationErrors = Object.values(shiftErrors).some(hasError => hasError === true);
 
-    // CALLBACK để ShiftCard báo cáo lỗi của nó
     const handleShiftErrorChange = useCallback((index: number, hasError: boolean) => {
         setShiftErrors(prevErrors => {
-            // Chỉ cập nhật nếu trạng thái lỗi thực sự thay đổi
             if (prevErrors[index] !== hasError) {
                 return {
                     ...prevErrors,
@@ -244,7 +278,7 @@ export default function ScheduleSetupScreen({ navigation, route }: ScheduleSetup
 
     // Effect tải dữ liệu và thiết lập tiêu đề
     useEffect(() => {
-        navigation.setOptions({ title: `Lịch làm việc: ${user.name || user.email}` });
+        navigation.setOptions({ title: `Thiết lập lịch: ${user.name || user.email}` });
 
         const fetchSchedule = async () => {
             if (!user.uid) { 
@@ -258,12 +292,24 @@ export default function ScheduleSetupScreen({ navigation, route }: ScheduleSetup
                 if (docSnap.exists() && docSnap.data().shiftSchedule) {
                     const fetchedSchedule = docSnap.data().shiftSchedule as Shift[];
                     
-                    if (fetchedSchedule.length === INITIAL_SCHEDULE.length) {
-                        setSchedule(fetchedSchedule);
-                    } else {
-                        console.warn("Lịch làm việc không đủ 7 ngày, sử dụng mặc định.");
-                        setSchedule(INITIAL_SCHEDULE);
-                    }
+                    // ⭐ Lấy các ca làm việc đã lưu TỪNG NGÀY (dateKey)
+                    const fetchedMap = fetchedSchedule.reduce((acc, shift) => {
+                        acc[shift.dateKey] = shift;
+                        return acc;
+                    }, {} as Record<string, Shift>);
+                    
+                    // ⭐ Cập nhật lịch ban đầu với dữ liệu đã lưu nếu có (dựa trên dateKey)
+                    const mergedSchedule = INITIAL_SCHEDULE.map(initialShift => {
+                        const existingShift = fetchedMap[initialShift.dateKey];
+                        // Nếu có ca làm việc đã lưu cho ngày này, dùng nó. Ngược lại dùng mặc định.
+                        return existingShift ? existingShift : initialShift;
+                    });
+                    
+                    setSchedule(mergedSchedule);
+                    
+                } else {
+                    // Nếu chưa có lịch, dùng lịch mặc định được tạo theo ngày
+                    setSchedule(INITIAL_SCHEDULE);
                 }
             } catch (error) {
                 console.error("Lỗi khi tải lịch làm việc:", error);
@@ -281,12 +327,11 @@ export default function ScheduleSetupScreen({ navigation, route }: ScheduleSetup
         });
         setShiftErrors(initialErrors);
 
-    }, [user, navigation]); 
+    }, [user, navigation]); // Thêm user và navigation vào dependency array
 
 
     // Hàm lưu dữ liệu
     const handleSave = async () => {
-        // Kiểm tra lỗi validation TỔNG THỂ dựa trên state `hasValidationErrors`
         if (hasValidationErrors) {
             Alert.alert("Lỗi Định Dạng", "Vui lòng sửa các lỗi định dạng hoặc logic giờ làm việc đang hiển thị trên màn hình trước khi lưu.");
             return;
@@ -294,10 +339,10 @@ export default function ScheduleSetupScreen({ navigation, route }: ScheduleSetup
         
         setIsSaving(true);
         try {
-            // LƯU DỮ LIỆU VÀO FIRESTORE
+            // ⭐ LƯU DỮ LIỆU MỚI: Chỉ lưu 7 ngày vừa được thiết lập (theo dateKey)
             const userRef = doc(db, "users", user.uid);
             await updateDoc(userRef, {
-                shiftSchedule: schedule, // Lưu mảng lịch làm việc
+                shiftSchedule: schedule, // Lưu mảng 7 ngày có dateKey
             });
 
             Alert.alert("Thành công", `Đã lưu lịch làm việc cho nhân viên ${user.name || user.email}.`);
@@ -322,18 +367,20 @@ export default function ScheduleSetupScreen({ navigation, route }: ScheduleSetup
     return (
         <SafeAreaView style={styles.safeArea}>
             <View style={styles.container}>
-                <Text style={styles.infoText}>Chỉnh sửa ca làm việc (HH:mm) hoặc chọn Ngày nghỉ (OFF).</Text>
+                <Text style={styles.infoText}>
+                    Chỉnh sửa ca làm việc (HH:mm) cho tuần bắt đầu từ {schedule[0].dateKey.split('-').reverse().join('/')}.
+                </Text>
 
                 <FlatList
                     data={schedule}
-                    keyExtractor={item => item.day}
+                    keyExtractor={item => item.dateKey} // ⭐ Dùng dateKey làm key
                     renderItem={({ item, index }) => (
                         <ShiftCard
                             shift={item}
                             index={index}
                             schedule={schedule}
                             setSchedule={setSchedule}
-                            onValidationErrorChange={handleShiftErrorChange} // Truyền callback mới
+                            onValidationErrorChange={handleShiftErrorChange} 
                         />
                     )}
                     contentContainerStyle={{ paddingBottom: 20 }}
@@ -342,7 +389,6 @@ export default function ScheduleSetupScreen({ navigation, route }: ScheduleSetup
                 <TouchableOpacity 
                     style={[styles.saveButton, (isSaving || hasValidationErrors) && styles.disabledButton]} 
                     onPress={handleSave} 
-                    // Tắt nút Lưu nếu đang lưu hoặc có lỗi validation
                     disabled={isSaving || hasValidationErrors}
                 >
                     {isSaving ? (
@@ -384,6 +430,7 @@ const styles = StyleSheet.create({
         textAlign: "center",
         marginBottom: 15,
         paddingHorizontal: 10,
+        fontWeight: '600', // Đậm hơn để nổi bật thông tin ngày
     },
     // --- CARD & ITEM STYLES ---
     card: {
