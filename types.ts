@@ -3,6 +3,9 @@
 // =======================================================
 import { Timestamp } from "firebase/firestore";
 
+// ⭐ KHẮC PHỤC LỖI TS2459: Export Timestamp để các module khác có thể import
+export { Timestamp };
+
 // Định nghĩa lại kiểu Timestamp của Firestore để sử dụng nhất quán
 // Vì `any` không tốt, dùng kiểu `Timestamp` của firebase/firestore
 // Nếu không muốn import từ firebase, bạn có thể dùng một interface đơn giản:

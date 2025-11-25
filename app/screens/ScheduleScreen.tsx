@@ -12,33 +12,32 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { doc, onSnapshot } from "firebase/firestore"; 
 import { db } from "../../firebaseConfig"; 
-// DÒNG NÀY ĐÃ ĐƯỢC XÓA: import type { User, Shift } from "../../types"; 
 
-// ⭐ ĐỊNH NGHĨA LẠI TYPES ĐỂ SỬA LỖI (Bổ sung dateKey)
+// ⭐ Import TYPES từ React Navigation và file types gốc
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+// Giả định file types nằm ở thư mục gốc của project
+import type { RootStackParamList, User, Timestamp } from "../../types"; 
+
+// 💡 Do bạn đã xóa import từ "../../types" cho Shift và định nghĩa lại. 
+// Tôi sẽ sử dụng định nghĩa Shift đã được bổ sung dateKey của bạn.
 interface Shift {
     day: string; // Thứ Hai, Thứ Ba, ...
-    dateKey: string; // YYYY-MM-DD
+    dateKey: string; // YYYY-MM-DD (Bắt buộc để KeyExtractor hoạt động)
     start: string; // Giờ bắt đầu (HH:mm) hoặc "OFF"
     end: string; // Giờ kết thúc (HH:mm) hoặc "OFF"
 }
 
-interface User {
-    uid: string;
-    email: string;
-    name?: string;
-    shiftSchedule?: Shift[]; // Thêm để tránh lỗi khi đọc data
+// 💡 Cập nhật lại định nghĩa User để sử dụng kiểu Shift mới 
+// và loại bỏ định nghĩa User trùng lặp nếu nó đã có trong "../../types"
+interface LocalUser extends Omit<User, 'shiftSchedule'> {
+    shiftSchedule?: Shift[]; // Sử dụng kiểu Shift đã cập nhật
 }
-// END OF TYPE DEFINITIONS
 
-// Khai báo kiểu dữ liệu cho route.params
-interface LichLamViecProps {
-    route: {
-        params: {
-            user: User; 
-        };
-    };
-    navigation: any;
-}
+
+// ⭐ KHẮC PHỤC LỖI TS2322 BẰNG CÁCH SỬ DỤNG UTILITY TYPE CHUẨN CỦA RN
+// Lỗi TS2322 trong AppNavigator.tsx sẽ được giải quyết khi dùng kiểu này.
+type LichLamViecScreenProps = NativeStackScreenProps<RootStackParamList, 'LichLamViec'>;
+
 
 // Hàm tiện ích để chuyển đổi YYYY-MM-DD sang DD/MM/YYYY
 const formatDate = (dateKey: string) => {
@@ -53,13 +52,16 @@ const formatDate = (dateKey: string) => {
     }
 };
 
-export default function LichLamViecScreen({ route, navigation }: LichLamViecProps) {
+// Sử dụng LichLamViecScreenProps
+export default function LichLamViecScreen({ route, navigation }: LichLamViecScreenProps) {
+    // route.params chắc chắn có user vì đã khai báo trong RootStackParamList
     const { user } = route.params; 
     
     const [schedule, setSchedule] = useState<Shift[]>([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        // Thiết lập tiêu đề màn hình
         if (user?.name) {
             navigation.setOptions({ title: `Lịch làm việc của ${user.name}` });
         }
@@ -73,11 +75,13 @@ export default function LichLamViecScreen({ route, navigation }: LichLamViecProp
         const userRef = doc(db, "users", user.uid);
         const unsub = onSnapshot(userRef, (docSnap) => {
             if (docSnap.exists()) {
-                const userData = docSnap.data() as User;
+                // Ép kiểu sang LocalUser để đảm bảo shiftSchedule có định dạng dateKey
+                const userData = docSnap.data() as LocalUser; 
                 const currentSchedule = userData.shiftSchedule || [];
                 
-                // ⭐ Lỗi 2339 đã được sửa do Shift đã có dateKey
+                // Sắp xếp theo dateKey để lịch làm việc hiển thị theo thứ tự thời gian
                 const sortedSchedule = (currentSchedule as Shift[]).sort((a, b) => {
+                    // Chuyển đổi dateKey sang Date object để so sánh
                     return new Date(a.dateKey).getTime() - new Date(b.dateKey).getTime();
                 });
                 
@@ -92,6 +96,7 @@ export default function LichLamViecScreen({ route, navigation }: LichLamViecProp
             setIsLoading(false);
         });
 
+        // Cleanup function
         return () => unsub();
     }, [user.uid, user.name, navigation]);
 
@@ -100,6 +105,7 @@ export default function LichLamViecScreen({ route, navigation }: LichLamViecProp
     const isDayOff = (shift: Shift) => shift.start === "OFF" && shift.end === "OFF";
     
     const handleSetup = () => {
+        // Điều hướng đến màn hình thiết lập lịch mẫu
         navigation.navigate("SetupLichLamViec", { user: user });
     };
 
@@ -121,12 +127,10 @@ export default function LichLamViecScreen({ route, navigation }: LichLamViecProp
             
             <FlatList
                 data={schedule}
-                // ⭐ Lỗi 2339 đã được sửa
                 keyExtractor={(item) => item.dateKey} 
                 renderItem={({ item }) => (
                     <View style={[styles.item, isDayOff(item) && styles.dayOffItem]}>
                         <View>
-                            {/* ⭐ Lỗi 2339 đã được sửa */}
                             <Text style={styles.dateTitle}>{formatDate(item.dateKey)}</Text>
                             <Text style={styles.dayTitle}>{item.day}</Text>
                         </View>
@@ -141,8 +145,8 @@ export default function LichLamViecScreen({ route, navigation }: LichLamViecProp
                 )}
                 ListEmptyComponent={() => (
                     <View style={{ padding: 20, alignItems: 'center' }}>
-                        <Text>Nhân viên chưa có lịch làm việc được thiết lập cho tuần này.</Text>
-                        <Text>Vui lòng nhấn nút "Thiết Lập Lịch Tuần Hiện Tại".</Text>
+                        <Text style={{ marginBottom: 5 }}>Nhân viên chưa có lịch làm việc được thiết lập cho tuần này.</Text>
+                        <Text style={{ fontWeight: '500' }}>Vui lòng nhấn nút "Thiết Lập Lịch Tuần Hiện Tại".</Text>
                     </View>
                 )}
             />
